@@ -117,6 +117,8 @@ def _reader() -> sqlite3.Connection:
 
 @contextmanager
 def tx():
+    """Transação de escrita. Dentro do bloco use só o `c` yieldado: all_/one leem por outra conexão
+    e não enxergam as escritas ainda não confirmadas."""
     with _lock:
         _conn.execute("BEGIN")
         try:
