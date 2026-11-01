@@ -1010,3 +1010,19 @@ body.style-pixel .ug-bar i { background: repeating-linear-gradient(90deg, var(--
   margin: -1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; white-space: nowrap !important;
   border: 0 !important;
 }
+
+/* ---------- topbar em celular (≤700px): quebra em linhas, rótulos viram só ícone, perfil sempre visível ---------- */
+@media (max-width: 700px) {
+  .topbar { height: auto; min-height: 56px; flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; }
+  .brand-logo { order: 0; }
+  .brand-logo [data-app-name], .badge-tag { display: none; }
+  .hud { order: 1; margin-left: auto; gap: 6px; flex-shrink: 0; }
+  .hud-pill { font-size: 0; padding: 7px 9px; } /* rótulo some, ícone e chevron ficam */
+  .hud-pill .ic { width: 16px; height: 16px; }
+  .um-usage .ug-num { display: none; }
+  .tabs { order: 2; width: 100%; overflow-x: auto; flex-wrap: nowrap; gap: 4px; padding-bottom: 2px; scrollbar-width: thin; }
+  .tab { flex: 0 0 auto; font-size: 0; padding: 8px 11px; }  /* ícone apenas; o rótulo fica no atributo title */
+  .tab .ic { width: 17px; height: 17px; }
+  .topbar .cv-toolbar { order: 3; width: 100%; flex-wrap: wrap; gap: 6px; padding: 0; border: 0; background: none; }
+  .topbar .cv-toolbar .btn { flex: 1 1 auto; justify-content: center; }
+}

@@ -67,7 +67,7 @@ function renderUserMenu() {
       ${gauge}
       <span class="ug-num">${n(tok)}${tmax == null ? ' tokens' : ` / ${n(tmax)}`}</span>
     </button>
-    <button class="hud-pill um-btn" id="umToggle">${ic('user')} ${esc(me.name || me.email)} ${ic('chevron-down', 'caret')}</button>
+    <button class="hud-pill um-btn" id="umToggle" title="${esc(me.name || me.email)}" aria-label="${esc(me.name || me.email)}">${ic('user')} ${esc(me.name || me.email)} ${ic('chevron-down', 'caret')}</button>
     <div class="um-pop" id="umPop" hidden>
       <div class="um-head"><b>${esc(me.name || me.email)}</b><small>${esc(me.email)}</small></div>
       <div class="section-label"><span>Uso deste mês</span></div>

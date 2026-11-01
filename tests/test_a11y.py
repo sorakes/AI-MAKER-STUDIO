@@ -40,3 +40,14 @@ def test_focus_visible_rules_exist_for_keyboard_users():
         text = (config.STATIC_DIR / "css" / css).read_text(encoding="utf-8")
         assert ":focus-visible" in text, css
     assert ".sr-only" in (config.STATIC_DIR / "css" / "studio.css").read_text(encoding="utf-8")
+
+
+def test_mobile_topbar_keeps_accessible_names_and_responsive_rules():
+    for css in ("studio.css", "admin.css"):
+        text = (config.STATIC_DIR / "css" / css).read_text(encoding="utf-8")
+        assert "@media (max-width: 700px)" in text, css
+        assert "flex-wrap: wrap" in text, css
+    for page in ("studio.html", "admin.html"):
+        html = (config.STATIC_DIR / page).read_text(encoding="utf-8")
+        for m in re.finditer(r'<button class="tab[^"]*"[^>]*>', html):
+            assert 'aria-label="' in m.group(0), (page, m.group(0))
