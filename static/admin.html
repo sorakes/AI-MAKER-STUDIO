@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
+    <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-en.js"></script>
+  <script src="/js/i18n-es.js"></script>
+  <title>Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/studio.css">
+  <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body class="admin style-pixel">
+
+<header class="topbar">
+  <div class="brand-logo"><span data-app-logo class="brand-mark"><i data-ic="logo"></i></span> <span data-app-name>Studio</span> <span class="badge-tag">ADMIN</span></div>
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-view="overview"><i data-ic="dashboard"></i> Painel</button>
+    <button class="tab" data-view="users"><i data-ic="users"></i> Usuários</button>
+    <button class="tab" data-view="groups"><i data-ic="users"></i> Grupos</button>
+    <button class="tab" data-view="sso"><i data-ic="lock"></i> Microsoft</button>
+    <button class="tab" data-view="models"><i data-ic="key"></i> Keys &amp; Modelos</button>
+    <button class="tab" data-view="branding"><i data-ic="sparkles"></i> Branding</button>
+    <button class="tab" data-view="prompts"><i data-ic="wand"></i> Prompts</button>
+    <button class="tab" data-view="logs"><i data-ic="list"></i> Logs</button>
+    <button class="tab" data-view="files"><i data-ic="folder"></i> Arquivos</button>
+    <button class="tab" data-view="settings"><i data-ic="settings"></i> Configurações</button>
+  </nav>
+  <div class="hud"><div class="user-menu" id="userMenu"></div></div>
+</header>
+
+<main class="admin-main">
+
+  <section class="aview active" id="v-overview">
+    <div class="kpis" id="kpis"></div>
+    <div class="grid2">
+      <div class="panel"><div class="section-label"><span>Gasto por dia (mês atual)</span></div><div id="chartDays" class="bars"></div></div>
+      <div class="panel"><div class="section-label"><span>Quem mais usa (mês)</span></div><table class="tbl" id="topUsers"></table></div>
+    </div>
+    <div class="panel"><div class="section-label"><span>Provedores</span></div><div id="provSummary" class="prov-summary"></div></div>
+  </section>
+
+  <section class="aview" id="v-users">
+    <div class="panel">
+      <div class="section-label"><span>Usuários</span><button class="btn small primary" id="btnNewUser"><i data-ic="plus"></i> Nova conta</button></div>
+      <table class="tbl" id="usersTbl"></table>
+    </div>
+  </section>
+
+  <section class="aview" id="v-groups">
+    <div class="panel">
+      <div class="section-label"><span>Grupos</span><button class="btn small primary" id="btnNewGroup"><i data-ic="plus"></i> Novo grupo</button></div>
+      <p class="note">Cada grupo define <b>o que a conta pode fazer</b> (abas, gerar imagem/vídeo, IA, arquivos, painel admin) e <b>limites</b>. Quem está em vários grupos recebe a soma das permissões e o limite mais generoso. Contas sem grupo têm o estúdio todo liberado e os limites padrão. Limite próprio da conta (em Usuários) sempre vence. Regras de <b>atribuição automática</b> colocam a conta no grupo a cada login com Microsoft.</p>
+      <div id="groupsList" class="groups-list"></div>
+    </div>
+  </section>
+
+  <section class="aview" id="v-sso">
+    <div class="panel narrow" id="ssoPanel"></div>
+  </section>
+
+  <section class="aview" id="v-models">
+    <div class="panel">
+      <div class="section-label"><span>API keys</span><span class="hint">salvas criptografadas · nunca voltam para o navegador</span></div>
+      <div id="providers" class="providers"></div>
+    </div>
+    <div class="panel">
+      <div id="needsBox" class="needs-box"></div>
+      <div class="section-label"><span>Modelos disponíveis nos nós</span><button class="btn small primary" id="btnAddModel"><i data-ic="plus"></i> Adicionar modelo</button></div>
+      <p class="note">Só aparecem no estúdio os modelos <b>ativos</b> cujo provedor tem key. <i data-ic="star"></i> = padrão do "Automático" (um por função: texto→vídeo, imagem→vídeo, imagem, imagem com referências). Custo é estimativa por geração ou por segundo de vídeo e alimenta os limites de gasto.</p>
+      <div id="modelsList"></div>
+    </div>
+  </section>
+
+  <section class="aview" id="v-logs">
+    <div class="panel">
+      <div class="section-label"><span>Logs de uso</span>
+        <span class="actions filters">
+          <select id="logUser"><option value="">Todos os usuários</option></select>
+          <select id="logKind"><option value="">Todos os tipos</option><option>image</option><option>video</option><option>text</option><option>vision</option><option>montage</option><option>upload</option><option>delete</option><option>login</option><option>admin</option></select>
+          <select id="logStatus"><option value="">Qualquer status</option><option value="ok">ok</option><option value="error">erro</option></select>
+          <button class="btn small ghost" id="logCsv"><i data-ic="download"></i> CSV</button>
+        </span>
+      </div>
+      <div class="note" id="logTotals"></div>
+      <table class="tbl" id="logsTbl"></table>
+      <div class="pager"><button class="btn small ghost" id="logPrev">← Anteriores</button><span id="logPage"></span><button class="btn small ghost" id="logNext">Próximos →</button></div>
+    </div>
+  </section>
+
+  <section class="aview" id="v-files">
+    <div class="panel">
+      <div class="section-label"><span>Arquivos</span>
+        <span class="actions filters">
+          <select id="fileUser"><option value="">Todos os usuários</option></select>
+          <select id="fileKind"><option value="">Todos</option><option value="image">Imagens</option><option value="video">Vídeos</option><option value="audio">Áudio</option></select>
+          <button class="btn small" id="fileDelSel" disabled><i data-ic="trash"></i> Apagar selecionados</button>
+        </span>
+      </div>
+      <div class="note" id="fileTotals"></div>
+      <div id="filesGrid" class="files-grid"></div>
+    </div>
+  </section>
+
+  <section class="aview" id="v-branding">
+    <div class="br-grid">
+      <div class="panel">
+        <div class="section-label"><span>Identidade</span></div>
+        <label>Nome do programa <input id="brName" placeholder="Ex.: Pixel Studio"></label>
+        <label>Frase do login <input id="brTagline" placeholder="Entre para abrir o seu estúdio."></label>
+        <div class="section-label"><span>Logo</span><span class="hint">PNG, SVG, WEBP ou GIF até 4 MB · também vira o favicon</span></div>
+        <div class="br-logo"><div class="br-logo-box" id="brLogoBox"></div>
+          <div class="br-logo-actions"><label class="btn small"><i data-ic="upload"></i> Enviar logo<input type="file" id="brLogoFile" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" hidden></label>
+          <button class="btn small ghost" id="brLogoDel"><i data-ic="trash"></i> Remover</button></div></div>
+        <div class="section-label"><span>Tema</span></div>
+        <div class="br-themes" id="brThemes"></div>
+        <div class="section-label"><span>Cores personalizadas</span><span class="hint">vazio = cor do tema</span></div>
+        <div class="br-colors">
+          <label>Destaque <span class="br-color"><input type="color" id="brAccent"><button class="btn small ghost" data-clear="brAccent">tema</button></span></label>
+          <label>Secundária <span class="br-color"><input type="color" id="brAccent2"><button class="btn small ghost" data-clear="brAccent2">tema</button></span></label>
+          <label>Fundo <span class="br-color"><input type="color" id="brBg"><button class="btn small ghost" data-clear="brBg">tema</button></span></label>
+        </div>
+        <div class="section-label"><span>Estilo dos botões e cartões</span></div>
+        <div class="chips" id="brStyle"><button class="chip" data-style="pixel">Pixel art</button><button class="chip" data-style="smooth">Arredondado</button></div>
+        <div class="br-actions"><button class="btn primary" id="brSave"><i data-ic="check"></i> Salvar branding</button></div>
+      </div>
+      <div class="panel br-preview-panel">
+        <div class="section-label"><span>Prévia</span></div>
+        <div class="br-preview" id="brPreview"></div>
+        <p class="note">A prévia aplica as cores nesta página na hora. Salve para valer para todos.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="aview" id="v-prompts">
+    <div class="panel">
+      <div class="section-label"><span>Prompts por trás dos nós</span><span class="hint">em inglês por padrão: os modelos entendem melhor</span></div>
+      <p class="note">Estes são os textos de instrução que o app manda para a IA em cada etapa. Edite para mudar o estilo da sua produção. "Restaurar padrão" volta ao texto original. Nos prompts de Personagens/Produtos as variáveis entre chaves, como {name}, são preenchidas pelo app.</p>
+      <div id="promptList" class="pr-list"></div>
+    </div>
+  </section>
+
+  <section class="aview" id="v-settings">
+    <div class="panel narrow">
+      <div class="section-label"><span>Limites padrão das contas</span><span class="hint">∞ ou vazio = sem limite · vale para quem não tem limite próprio</span></div>
+      <div class="limits-grid" id="setLimits"></div>
+      <div class="section-label"><span>Tokens</span><span class="hint">o estúdio mostra custo em tokens, nunca em dinheiro</span></div>
+      <label>Tokens por US$ 1<input id="setTokenRate" type="number" min="0.01" step="any"></label>
+      <div class="section-label"><span>Idioma padrão</span></div>
+      <label>Idioma da interface para quem ainda não escolheu (cada pessoa pode trocar no menu do perfil).<select id="setLang" data-noi18n><option value="en">English</option><option value="pt">Português</option><option value="es">Español</option></select></label>
+      <p class="note" id="setTokenHint"></p>
+      <button class="btn primary" id="btnSaveSettings">Salvar</button>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg" class="admin-dlg"><form method="dialog" id="dlgForm"></form></dialog>
+<div id="toast"></div>
+<script src="/js/icons.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>

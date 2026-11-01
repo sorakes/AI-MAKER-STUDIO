@@ -1,0 +1,16 @@
+services:
+  studio:
+    build: .
+    image: ai-maker-studio:latest
+    container_name: ai-studio
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - path: .env
+        required: false   # works without .env too (defaults + random admin password in the log)
+    volumes:
+      - studio-data:/data
+
+volumes:
+  studio-data:

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
+    <script src="/js/i18n.js"></script>
+  <script src="/js/i18n-en.js"></script>
+  <script src="/js/i18n-es.js"></script>
+  <title>Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/studio.css">
+</head>
+<body class="canvas-mode on-canvas style-pixel">
+
+<header class="topbar">
+  <div class="brand-logo"><span data-app-logo class="brand-mark"><i data-ic="logo"></i></span> <span data-app-name>Studio</span></div>
+  <nav class="tabs" id="studioTabs">
+    <button class="tab active" data-view="canvas"><i data-ic="video"></i> Video Studio</button>
+    <button class="tab" data-view="character"><i data-ic="user"></i> Personagens</button>
+    <button class="tab" data-view="product"><i data-ic="logo"></i> Produtos</button>
+    <button class="tab" data-view="inventory"><i data-ic="folder"></i> Inventário</button>
+  </nav>
+  <div class="cv-toolbar canvas-only" style="border:0;padding:0;background:none">
+    <button class="btn small primary" id="cvRunAll" title="Gera tudo que falta, na ordem das ligações, e monta o corte"><i data-ic="play"></i> Rodar fluxo</button>
+    <button class="btn small ghost" id="cvFit"><i data-ic="fit"></i> Enquadrar</button>
+    <button class="btn small ghost" id="cvClear">Limpar</button>
+  </div>
+  <div class="hud">
+    <div class="user-menu" id="userMenu"></div>
+  </div>
+</header>
+
+<main class="workspace">
+  <section class="stage">
+    <div class="view" id="view-inventory">
+      <div class="inv-top">
+        <div class="inv-title"><b>Inventário</b><small id="invStats"></small></div>
+        <div class="inv-filters">
+          <span class="chips"><button class="chip active" data-ikind="">Tudo</button><button class="chip" data-ikind="image">Imagens</button><button class="chip" data-ikind="video">Vídeos</button><button class="chip" data-ikind="audio">Áudio</button></span>
+          <select id="invOrigin"><option value="">Gerados e enviados</option><option value="gen">Só gerados</option><option value="up">Só enviados</option></select>
+          <input id="invSearch" placeholder="Buscar pelo nome">
+          <button class="btn small ghost" id="invRefresh" title="Atualizar"><i data-ic="refresh"></i></button>
+        </div>
+      </div>
+      <div class="inv-bar">
+        <button class="btn small ghost" id="invAll"></button>
+        <button class="btn small ghost" id="invNone" hidden>Limpar seleção</button>
+        <span class="inv-selcount" id="invSelCount"></span>
+        <button class="btn small" id="invSend" disabled><i data-ic="send"></i> Enviar para nó</button>
+        <button class="btn small danger" id="invDel" disabled><i data-ic="trash"></i> Apagar selecionados</button>
+      </div>
+      <div id="invItemsBox"><div class="section-label"><span>Personagens e produtos salvos</span><span class="hint">as imagens deles ficam guardadas dentro do item</span></div>
+        <div class="inv-items" id="invItems"></div></div>
+      <div class="section-label"><span>Arquivos</span></div>
+      <div class="inv-grid" id="invGrid"></div>
+    </div>
+    <div class="view active" id="view-canvas">
+      <div class="cv-toolbar">
+        <div class="cv-tabs" id="cvTabs"></div>
+        <span class="cv-hint">roda do mouse = zoom · arraste o fundo = mover · Delete = apagar nó selecionado · clique numa linha = transição/remover</span>
+      </div>
+      <div class="cv-body">
+        <aside class="cv-palette">
+          <div class="section-label"><span>Nós</span><span class="hint">clique ou arraste para o canvas</span></div>
+          <div id="cvPalette" class="cv-pal-list"></div>
+          <div class="section-label"><span>Como ligar</span></div>
+          <ol class="cv-howto">
+            <li>Puxe da bolinha <b>●</b> da <b>direita</b> de um nó até a bolinha da <b>esquerda</b> de outro.</li>
+            <li>O que entra pela esquerda vira o <b>1º frame</b> (imagem) ou a <b>continuação</b> (último frame do vídeo).</li>
+            <li>Em cada nó escolha o <b>modelo</b>: os disponíveis são liberados pelo administrador.</li>
+            <li><b>Rodar fluxo</b> gera tudo na ordem certa e monta o corte final.</li>
+          </ol>
+        </aside>
+        <div class="cv-board" id="cvBoard">
+          <div class="cv-world" id="cvWorld">
+            <svg class="cv-edges" id="cvEdges"></svg>
+          </div>
+          <div class="cv-empty" id="cvEmpty" hidden>Seu estúdio está vazio.<br>Envie fotos/vídeos ou adicione um nó <b>Gerar vídeo</b> ou <b>Gerar imagem</b>.</div>
+          <div class="cv-drop-hint">Solte aqui</div>
+        </div>
+        <aside class="cv-library">
+          <div id="cvAssetsPanel" class="as-panel"></div>
+          <div class="files-panel">
+          <div class="section-label"><span>Meus arquivos</span><label class="btn small ghost cv-upload"><i data-ic="upload"></i> Enviar<input type="file" id="cvFile" accept="image/*,video/*,audio/*" multiple hidden></label></div>
+          <p class="cv-side-note" id="cvStorage">Arraste para o canvas. Também dá para soltar arquivos do computador direto no canvas.</p>
+          <div id="cvLibrary" class="cv-lib-grid"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="dzDialog" class="dz-dialog">
+  <div class="dz-top">
+    <div class="dz-title"><i data-ic="route"></i><div><small>Câmera e movimento · desenhe no frame</small><b id="dzTitle">Plano</b></div></div>
+    <div class="dz-tools">
+      <button class="btn small ghost dz-tool" id="dzToolDraw" title="Desenhar (D)"><i data-ic="route"></i><span>Desenhar</span></button>
+      <button class="btn small ghost dz-tool" id="dzToolErase" title="Borracha: clique num traço para apagar (E)"><i data-ic="x"></i><span>Borracha</span></button>
+      <button class="btn small ghost" id="dzUndo" title="Desfazer (Ctrl+Z)"><i data-ic="undo"></i> Desfazer</button>
+      <button class="btn small ghost" id="dzClear" title="Apagar todos os traços"><i data-ic="trash"></i> Limpar</button>
+      <span class="dz-sep"></span>
+      <button class="btn small ghost" id="dzHelpBtn"><i data-ic="help"></i> Como usar</button>
+      <button class="btn small ghost" id="dzCancel">Cancelar</button>
+      <button class="btn small primary" id="dzSave"><i data-ic="check"></i> Salvar</button>
+    </div>
+  </div>
+  <div class="dz-help" id="dzHelp">
+    <div><b class="n" style="background:#a855f7">1</b><span>Com o cartão <b style="color:#a855f7">CÂMERA</b> ativo, desenhe em <b>roxo</b> por onde a câmera vai sobre a imagem: o ponto é o começo, a seta é o fim.</span></div>
+    <div><b class="n">2</b><span>Clique em <b>+ Elemento</b> para ganhar uma cor nova. <b>Circule</b> o objeto e puxe uma <b>linha</b> mostrando para onde ele vai.</span></div>
+    <div><b class="n">3</b><span>Em cada cartão, escreva o que acontece. Ex.: <i>AMARELO: a bola vai levemente para a direita</i>.</span></div>
+    <div><b class="n">4</b><span><b>Salvar</b>: a IA olha o frame + desenho e escreve a direção no prompt do vídeo.</span></div>
+  </div>
+  <div class="dz-stale" id="dzStale" hidden><i data-ic="alert"></i> Este desenho foi feito sobre outro frame. Confira se os traços ainda batem com a imagem.</div>
+  <div class="dz-body">
+    <div class="dz-stage" id="dzStage">
+      <div class="dz-canvaswrap"><img id="dzImg" alt="1º frame"><canvas id="dzCanvas"></canvas></div>
+    </div>
+    <aside class="dz-side">
+      <div class="dz-side-head"><span class="section-label"><span>Cartões</span></span><button class="btn small" id="dzAddEl"><i data-ic="plus"></i> Elemento</button></div>
+      <div id="dzCards" class="dz-cards"></div>
+      <div class="dz-res-box">
+        <div class="dz-side-head"><span class="section-label"><span>Como a IA entendeu</span></span><button class="btn small ghost" id="dzInterpret"><i data-ic="eye"></i> Ver</button></div>
+        <div id="dzResult"></div>
+      </div>
+    </aside>
+  </div>
+</dialog>
+
+
+<div id="toast"></div>
+<script src="/js/icons.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/effects.js"></script>
+<script src="/js/canvas.js"></script>
+<script src="/js/direction.js"></script>
+<script src="/js/creation.js"></script>
+<script src="/js/sprites.js"></script>
+<script src="/js/transitions.js"></script>
+<script src="/js/frames.js"></script>
+<script src="/js/review.js"></script>
+<script src="/js/assets.js"></script>
+<script src="/js/inventory.js"></script>
+</body>
+</html>

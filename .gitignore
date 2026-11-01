@@ -1,0 +1,20 @@
+# segredos e dados
+.env
+data/
+*.db
+*.db-*
+.secret_key
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# sistema/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
