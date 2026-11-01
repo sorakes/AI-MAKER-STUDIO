@@ -997,3 +997,16 @@ body.style-pixel .ug-bar i { background: repeating-linear-gradient(90deg, var(--
 
 .um-lang { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .78rem; color: var(--muted); margin-top: 6px; }
 .um-lang select { flex: 1; max-width: 150px; }
+
+/* acessibilidade: foco visível por teclado (o :focus-visible não aparece para clique com o mouse) */
+:is(a, button, input, select, textarea, summary, [tabindex]):focus-visible,
+.cv-upload:focus-within {
+  outline: 2px solid var(--accent, var(--emerald, #10b981));
+  outline-offset: 2px;
+}
+/* conteúdo só para leitor de tela (ex.: anúncio de upload) */
+.sr-only {
+  position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important;
+  margin: -1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; white-space: nowrap !important;
+  border: 0 !important;
+}

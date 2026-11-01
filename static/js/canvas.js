@@ -650,16 +650,33 @@ function bindBoard() {
   applyView();
 }
 
+function announceUpload(msg) {
+  const el = $('#uploadStatus');
+  if (el) el.textContent = msg;
+}
+
 async function uploadFiles(files, at) {
+  const btn = document.querySelector('.cv-upload');
+  btn?.setAttribute('aria-busy', 'true');
+  try {
+    await uploadEach(files, at);
+  } finally {
+    btn?.removeAttribute('aria-busy');
+  }
+}
+
+async function uploadEach(files, at) {
   for (const [i, f] of files.entries()) {
     toast(`Enviando ${f.name}…`);
+    announceUpload(`Enviando ${f.name}`);
     try {
       const m = await uploadFile(f);
+      announceUpload(`${f.name} enviado`);
       renderLibrary._sig = null;
       renderLibrary();
       if (m.kind === 'audio') { toast(`${f.name} em Meus arquivos: arraste para uma Montagem`); continue; }
       addMediaNode({ ...m, name: f.name }, { x: at.x + i * 30, y: at.y + i * 30 });
-    } catch (err) { toast(`Erro no upload: ${err.message}`); }
+    } catch (err) { toast(`Erro no upload: ${err.message}`); announceUpload(`Erro no upload de ${f.name}: ${err.message}`); }
   }
 }
 

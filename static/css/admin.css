@@ -199,3 +199,9 @@ input:disabled { opacity: .55; cursor: not-allowed; }
 .sug-row.rec { border-left: 3px solid var(--emerald); }
 .sug-row.rec b { color: var(--emerald); }
 .sug-row.picked { outline: 1px solid var(--emerald); background: color-mix(in srgb, var(--emerald) 8%, transparent); }
+
+/* acessibilidade: foco visível por teclado */
+:is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent, var(--emerald, #10b981));
+  outline-offset: 2px;
+}

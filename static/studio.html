@@ -84,7 +84,7 @@
         <aside class="cv-library">
           <div id="cvAssetsPanel" class="as-panel"></div>
           <div class="files-panel">
-          <div class="section-label"><span>Meus arquivos</span><label class="btn small ghost cv-upload"><i data-ic="upload"></i> Enviar<input type="file" id="cvFile" accept="image/*,video/*,audio/*" multiple hidden></label></div>
+          <div class="section-label"><span>Meus arquivos</span><label class="btn small ghost cv-upload"><i data-ic="upload"></i> Enviar<input type="file" id="cvFile" class="sr-only" accept="image/*,video/*,audio/*" multiple></label></div>
           <p class="cv-side-note" id="cvStorage">Arraste para o canvas. Também dá para soltar arquivos do computador direto no canvas.</p>
           <div id="cvLibrary" class="cv-lib-grid"></div>
           </div>
@@ -132,6 +132,7 @@
 
 
 <div id="toast"></div>
+<div id="uploadStatus" class="sr-only" role="status" aria-live="polite"></div>
 <script src="/js/icons.js"></script>
 <script src="/js/common.js"></script>
 <script src="/js/effects.js"></script>
