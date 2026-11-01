@@ -88,6 +88,18 @@ To add a language, copy `i18n-es.js`, translate the values, register the code in
 
 The flow is OpenID Connect with PKCE, and the id_token is validated: RS256 signature against Microsoft's public keys, issuer, audience, expiry and nonce. Existing accounts are only linked by email when the Tenant is a fixed ID. In production use HTTPS and `COOKIE_SECURE=1`.
 
+## Development and tests
+
+```bash
+pip install -r requirements-dev.txt   # produção + pytest + httpx
+python -m pytest -q                    # suíte completa (~10 s, sem rede e sem ffmpeg)
+```
+
+- `tests/conftest.py` cria um `DATA_DIR` temporário e define `SECRET_KEY`/`ADMIN_PASSWORD` de teste antes de importar o app, então nada toca o seu `data/`.
+- Mídia, provedores e Microsoft são simulados (`ffmpeg`, HTTP e tokens RS256 gerados no teste). Os testes de download sobem um servidor HTTP/HTTPS local.
+- O CI (`.github/workflows/ci.yml`) roda a mesma suíte no Python 3.12 a cada push e pull request.
+- Local: ao rodar com `uvicorn --reload`, o app recarrega; os testes não dependem de servidor rodando.
+
 ## Project layout
 
 ```
