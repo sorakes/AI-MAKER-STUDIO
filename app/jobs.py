@@ -216,6 +216,9 @@ def _store_bytes(job: dict, idx: int, data: bytes, ext: str) -> str:
     return storage.to_url(dest)
 
 
+VIDEO_TIMEOUT_S = 45 * 60  # teto do polling de vídeo no provedor
+
+
 async def _or_video(job: dict, st: dict, m: dict, i: int, n: int, prompt: str, spec: RenderRequest,
                     prev_image: str | None, ref_urls: list[str] = ()) -> bytes:
     """Vídeo pelo OpenRouter: envia o job, acompanha o polling_url e baixa o MP4."""
@@ -230,7 +233,10 @@ async def _or_video(job: dict, st: dict, m: dict, i: int, n: int, prompt: str, s
         st["started"] = time.time()
         _save(job)
     errors = 0
+    deadline = st.get("started", time.time()) + VIDEO_TIMEOUT_S
     while True:
+        if time.time() > deadline:
+            raise providers.ProviderError(f"timeout: o vídeo não ficou pronto em {VIDEO_TIMEOUT_S // 60} min")
         await asyncio.sleep(5)
         try:
             s = await asyncio.to_thread(providers.or_video_status, st["handle"])
