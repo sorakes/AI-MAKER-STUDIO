@@ -4,10 +4,12 @@
   /        estúdio individual do usuário logado
   /admin   painel (usuários, limites, keys cifradas, modelos, logs, arquivos)
 """
-from fastapi import FastAPI, Request
+import asyncio
 import re
 import time
+from contextlib import asynccontextmanager
 
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -16,19 +18,20 @@ from .config import STATIC_DIR
 from .routers import admin, studio
 from .routers import auth as auth_routes
 
-app = FastAPI(title="AI Studio", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None)
 
-
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     db.init()
     groups.init()
     assets.init()
     auth.bootstrap_admin()
     registry.seed()
     jobs.resume_all()
-    import asyncio
     asyncio.get_running_loop().run_in_executor(None, registry.backfill_costs)
+    yield
+
+
+app = FastAPI(title="AI Studio", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
 
 @app.middleware("http")
