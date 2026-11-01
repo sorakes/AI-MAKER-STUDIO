@@ -90,7 +90,7 @@ def save_asset(asset_id: str, body: assets.SaveBody, user: dict = Depends(need("
 @router.post("/assets/{asset_id}/generate")
 async def generate_asset(asset_id: str, body: assets.GenerateBody, user: dict = Depends(current_user)):
     _ws_asset(user, assets.get(asset_id, user)["kind"])
-    out = assets.generate(asset_id, user, body)
+    out = await asyncio.to_thread(assets.generate, asset_id, user, body)
     return {**out, "jobs": [_tok_job(j) for j in out["jobs"]]}
 
 
@@ -117,7 +117,7 @@ async def pose_render(asset_id: str, body: sprites.PoseRender, user: dict = Depe
     a = assets.get(asset_id, user)
     _ws_asset(user, a["kind"])
     try:
-        out = sprites.render_pose(user, a, body)
+        out = await asyncio.to_thread(sprites.render_pose, user, a, body)
         return {**out, "job": _tok_job(out["job"])}
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
