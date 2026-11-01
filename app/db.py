@@ -95,12 +95,24 @@ CREATE TABLE IF NOT EXISTS settings (
 def _connect() -> sqlite3.Connection:
     c = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False, isolation_level=None)
     c.row_factory = sqlite3.Row
+    c.execute("PRAGMA busy_timeout = 30000")
     c.execute("PRAGMA foreign_keys = ON")
     return c
 
 
 _conn = _connect()
-_conn.execute("PRAGMA journal_mode = WAL")
+_conn.execute("PRAGMA journal_mode = WAL")  # leitores não bloqueiam escritor e vice-versa
+_conn.execute("PRAGMA synchronous = NORMAL")  # seguro com WAL; menos fsync por commit
+_local = threading.local()
+
+
+def _reader() -> sqlite3.Connection:
+    """Conexão de leitura por thread (só SELECT). No WAL ela roda sem o _lock de escrita."""
+    c = getattr(_local, "conn", None)
+    if c is None:
+        c = _local.conn = _connect()
+        c.execute("PRAGMA query_only = ON")
+    return c
 
 
 @contextmanager
@@ -140,14 +152,12 @@ def init():
 
 
 def all_(sql: str, args=()) -> list[dict]:
-    with _lock:
-        return [dict(r) for r in _conn.execute(sql, args).fetchall()]
+    return [dict(r) for r in _reader().execute(sql, args).fetchall()]
 
 
 def one(sql: str, args=()) -> dict | None:
-    with _lock:
-        r = _conn.execute(sql, args).fetchone()
-        return dict(r) if r else None
+    r = _reader().execute(sql, args).fetchone()
+    return dict(r) if r else None
 
 
 def run(sql: str, args=()) -> int:
