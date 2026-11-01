@@ -72,7 +72,11 @@ def assemble_sequence(uid: int, items: list[dict], aspect: str = "16:9", audio: 
         args += ["-map", f"{len(clips)}:a", "-c:a", "aac", "-af", "apad", "-t", f"{total:.3f}"]
     out = storage.user_dir(uid, "cuts") / f"corte_{uuid.uuid4().hex[:6]}.mp4"
     args += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", str(out)]
-    proc = subprocess.run(args, capture_output=True, text=True, timeout=900)
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr[-900:])
+    try:
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=900)
+        if proc.returncode != 0:
+            raise RuntimeError(proc.stderr[-900:])
+    except BaseException:  # falha ou timeout: não deixa corte parcial ocupando disco
+        out.unlink(missing_ok=True)
+        raise
     return out
