@@ -85,11 +85,18 @@ def _asset_version() -> str:
 ASSET_VERSION = _asset_version()
 
 
+# Páginas HTML: scripts só do próprio servidor (sem inline); estilos inline permitidos (style="" nos templates).
+PAGE_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; "
+            "media-src 'self' blob: data: https:; connect-src 'self' blob:; object-src 'none'; base-uri 'self'; "
+            "form-action 'self'; frame-ancestors 'none'")
+
+
 def _page(name: str) -> HTMLResponse:
     """Página com ?v=<versão> nos .js/.css: depois de um deploy o navegador baixa os arquivos novos."""
     html = (STATIC_DIR / name).read_text(encoding="utf-8")
     html = re.sub(r'(src|href)="(/(?:js|css)/[^"?]+)"', lambda m: f'{m.group(1)}="{m.group(2)}?v={ASSET_VERSION}"', html)
-    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+    return HTMLResponse(html, headers={"Cache-Control": "no-store", "Content-Security-Policy": PAGE_CSP})
 
 
 @app.get("/", include_in_schema=False)

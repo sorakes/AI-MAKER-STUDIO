@@ -877,10 +877,17 @@ function field(label, html, extra = '') {
 
 const opt = (v, cur, text = v) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${text}</option>`;
 
+// vídeo de preview toca ao passar o mouse (sem onmouseenter inline: CSP)
+document.addEventListener('mouseover', (e) => { const v = e.target.closest?.('video[data-hover-play]'); if (v) v.play().catch(() => {}); });
+document.addEventListener('mouseout', (e) => {
+  const v = e.target.closest?.('video[data-hover-play]');
+  if (v && !v.contains(e.relatedTarget)) v.pause();
+});
+
 function mediaBody(n) {
   const m = n.media;
   return `<div class="cv-preview has">${m.kind === 'video'
-    ? `<video src="${m.url}" poster="${m.thumb}" muted loop playsinline onmouseenter="this.play()" onmouseleave="this.pause()"></video>`
+    ? `<video src="${m.url}" poster="${m.thumb}" muted loop playsinline data-hover-play></video>`
     : `<img src="${m.url}" alt="">`}</div>
     <div class="cv-meta"><span>${m.kind === 'video' ? `${m.duration || '?'}s · ${m.width || ''}×${m.height || ''}` : 'imagem'}</span><span>${m.kind === 'video' ? 'saída = último frame' : 'saída = esta imagem'}</span></div>`;
 }

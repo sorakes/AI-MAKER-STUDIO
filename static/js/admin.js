@@ -61,8 +61,14 @@ async function loadOverview() {
   $('#topUsers').innerHTML = '<tr><th>Usuário</th><th class="num">Gerações</th><th class="num">Gasto</th></tr>'
     + o.top_users.map((u) => `<tr><td>${esc(u.name || u.email)}<br><small class="mono">${esc(u.email)}</small></td><td class="num">${u.n}</td><td class="num">${fmtUsd(u.cost)}</td></tr>`).join('');
   $('#provSummary').innerHTML = o.providers.map((p) => `<span class="tag ${p.configured && p.enabled ? 'ok' : 'err'}">${esc(p.label)}: ${p.configured ? (p.enabled ? `key ${esc(p.hint)}` : 'desativado') : 'sem key'}</span>`).join('')
-    + ' <a class="btn small ghost" href="#models" onclick="show(\'models\')">Configurar</a>';
+    + ' <a class="btn small ghost" href="#models" data-show="models">Configurar</a>';
 }
+
+// clique em links gerados com data-show (CSP não permite onclick inline)
+document.addEventListener('click', (e) => {
+  const a = e.target.closest?.('[data-show]');
+  if (a) show(a.dataset.show);
+});
 
 // ---------------- Usuários ----------------
 
