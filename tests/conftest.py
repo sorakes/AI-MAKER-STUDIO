@@ -32,7 +32,7 @@ def client():
 def _isolate(client):
     """Cada teste começa sem cookie de sessão e sem contagem de tentativas de login."""
     client.cookies.clear()
-    auth._attempts.clear()
+    db.run("DELETE FROM login_attempts")
     yield
     client.cookies.clear()
 

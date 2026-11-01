@@ -89,6 +89,12 @@ CREATE TABLE IF NOT EXISTS canvases (
     doc TEXT NOT NULL,
     updated REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS login_attempts (
+    key TEXT NOT NULL,          -- ip|e-mail
+    ts REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS login_attempts_key ON login_attempts(key, ts);
+CREATE INDEX IF NOT EXISTS login_attempts_ts ON login_attempts(ts);
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
