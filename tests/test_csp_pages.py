@@ -31,3 +31,10 @@ def test_html_pages_send_csp_header():
     assert r.headers["content-security-policy"] == PAGE_CSP
     assert "script-src 'self'" in r.headers["content-security-policy"]
     assert "unsafe-eval" not in PAGE_CSP and "'unsafe-inline'" not in PAGE_CSP.split("style-src")[0]
+
+
+def test_media_sources_are_local_only():
+    csp = PAGE_CSP
+    assert "https:" not in csp.split("img-src")[1].split(";")[0]
+    assert "https:" not in csp.split("media-src")[1].split(";")[0]
+    assert "'unsafe-eval'" not in csp
