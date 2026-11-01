@@ -4,8 +4,10 @@
 
 As keys ficam cifradas na tabela providers; só são decifradas na hora da chamada.
 """
+import ipaddress
 import json
 import os
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -150,11 +152,57 @@ def _http(method: str, url: str, headers: dict | None = None, body=None, timeout
         raise ProviderError(f"sem conexão: {e.reason}") from e
 
 
+MAX_DOWNLOAD = 512 * 2**20  # teto por arquivo de saída do provedor
+
+
+def _check_public_url(url: str) -> None:
+    """Bloqueia SSRF: só http(s) e só destinos com IP público (sem loopback, RFC1918, link-local/metadata)."""
+    p = urllib.parse.urlparse(url)
+    if p.scheme not in ("http", "https") or not p.hostname:
+        raise ProviderError("URL de saída inválida (só http/https)")
+    port = p.port or (443 if p.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(p.hostname, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as e:
+        raise ProviderError(f"host de saída não resolve: {p.hostname}") from e
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%", 1)[0])
+        if ip.version == 6 and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        if not ip.is_global:
+            raise ProviderError("URL de saída aponta para endereço interno")
+
+
+class _CheckedRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _check_public_url(newurl)  # cada redirecionamento passa pela mesma checagem
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_download_opener = urllib.request.build_opener(_CheckedRedirect)
+
+
 def download(url: str, timeout: float = 300) -> bytes:
     if url.startswith("data:"):
         import base64
         return base64.b64decode(url.split(",", 1)[1])
-    return _http("GET", url, timeout=timeout, raw=True)
+    _check_public_url(url)
+    req = urllib.request.Request(url, headers={"User-Agent": f"{APP_NAME}/1.0"})
+    try:
+        with _download_opener.open(req, timeout=timeout) as r:
+            declared = r.headers.get("Content-Length")
+            if declared and declared.isdigit() and int(declared) > MAX_DOWNLOAD:
+                raise ProviderError("arquivo de saída grande demais")
+            buf = bytearray()
+            while chunk := r.read(64 * 1024):
+                buf += chunk
+                if len(buf) > MAX_DOWNLOAD:
+                    raise ProviderError("arquivo de saída grande demais")
+            return bytes(buf)
+    except urllib.error.HTTPError as e:
+        raise ProviderError(f"HTTP {e.code} ao baixar a saída") from e
+    except urllib.error.URLError as e:
+        raise ProviderError(f"sem conexão: {e.reason}") from e
 
 
 # ---------- OpenRouter ----------
