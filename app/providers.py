@@ -4,10 +4,12 @@
 
 As keys ficam cifradas na tabela providers; só são decifradas na hora da chamada.
 """
+import http.client
 import ipaddress
 import json
 import os
 import socket
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -153,56 +155,102 @@ def _http(method: str, url: str, headers: dict | None = None, body=None, timeout
 
 
 MAX_DOWNLOAD = 512 * 2**20  # teto por arquivo de saída do provedor
+MAX_REDIRECTS = 5
 
 
-def _check_public_url(url: str) -> None:
-    """Bloqueia SSRF: só http(s) e só destinos com IP público (sem loopback, RFC1918, link-local/metadata)."""
-    p = urllib.parse.urlparse(url)
-    if p.scheme not in ("http", "https") or not p.hostname:
-        raise ProviderError("URL de saída inválida (só http/https)")
-    port = p.port or (443 if p.scheme == "https" else 80)
+def _resolve_public(host: str, port: int) -> str:
+    """Resolve o host UMA vez e devolve um IP público. Qualquer IP interno/loopback/link-local recusa tudo."""
     try:
-        infos = socket.getaddrinfo(p.hostname, port, proto=socket.IPPROTO_TCP)
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror as e:
-        raise ProviderError(f"host de saída não resolve: {p.hostname}") from e
+        raise ProviderError(f"host de saída não resolve: {host}") from e
+    chosen = None
     for info in infos:
         ip = ipaddress.ip_address(info[4][0].split("%", 1)[0])
         if ip.version == 6 and ip.ipv4_mapped:
             ip = ip.ipv4_mapped
         if not ip.is_global:
             raise ProviderError("URL de saída aponta para endereço interno")
+        chosen = chosen or str(ip)
+    if not chosen:
+        raise ProviderError(f"host de saída não resolve: {host}")
+    return chosen
 
 
-class _CheckedRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        _check_public_url(newurl)  # cada redirecionamento passa pela mesma checagem
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+class _PinnedHTTP(http.client.HTTPConnection):
+    """Conecta no IP já validado; o cabeçalho Host continua sendo o nome original."""
+
+    def __init__(self, ip: str, host: str, port: int, timeout: float):
+        super().__init__(host, port, timeout=timeout)
+        self._ip = ip
+
+    def connect(self):
+        self.sock = socket.create_connection((self._ip, self.port), self.timeout)
 
 
-_download_opener = urllib.request.build_opener(_CheckedRedirect)
+class _PinnedHTTPS(http.client.HTTPSConnection):
+    """Conecta no IP validado e faz TLS com SNI/validação de certificado do nome original."""
+
+    def __init__(self, ip: str, host: str, port: int, timeout: float):
+        super().__init__(host, port, timeout=timeout, context=ssl.create_default_context())
+        self._ip = ip
+
+    def connect(self):
+        raw = socket.create_connection((self._ip, self.port), self.timeout)
+        self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
+
+
+def _open_pinned(url: str, timeout: float):
+    """GET com IP fixado; cada redirecionamento é resolvido e validado de novo (sem segunda consulta de DNS)."""
+    for _ in range(MAX_REDIRECTS + 1):
+        p = urllib.parse.urlsplit(url)
+        if p.scheme not in ("http", "https") or not p.hostname:
+            raise ProviderError("URL de saída inválida (só http/https)")
+        port = p.port or (443 if p.scheme == "https" else 80)
+        ip = _resolve_public(p.hostname, port)
+        cls = _PinnedHTTPS if p.scheme == "https" else _PinnedHTTP
+        conn = cls(ip, p.hostname, port, timeout)
+        path = (p.path or "/") + (f"?{p.query}" if p.query else "")
+        try:
+            conn.request("GET", path, headers={"User-Agent": f"{APP_NAME}/1.0", "Accept": "*/*"})
+            resp = conn.getresponse()
+        except OSError as e:
+            conn.close()
+            raise ProviderError(f"sem conexão: {e}") from e
+        if resp.status in (301, 302, 303, 307, 308):
+            loc = resp.getheader("Location")
+            resp.read()
+            conn.close()
+            if not loc:
+                raise ProviderError(f"HTTP {resp.status} sem Location")
+            url = urllib.parse.urljoin(url, loc)
+            continue
+        if resp.status != 200:
+            conn.close()
+            raise ProviderError(f"HTTP {resp.status} ao baixar a saída")
+        return conn, resp
+    raise ProviderError("redirecionamentos demais ao baixar a saída")
 
 
 def download(url: str, timeout: float = 300) -> bytes:
     if url.startswith("data:"):
         import base64
         return base64.b64decode(url.split(",", 1)[1])
-    _check_public_url(url)
-    req = urllib.request.Request(url, headers={"User-Agent": f"{APP_NAME}/1.0"})
+    conn, resp = _open_pinned(url, timeout)
     try:
-        with _download_opener.open(req, timeout=timeout) as r:
-            declared = r.headers.get("Content-Length")
-            if declared and declared.isdigit() and int(declared) > MAX_DOWNLOAD:
+        declared = resp.getheader("Content-Length")
+        if declared and declared.isdigit() and int(declared) > MAX_DOWNLOAD:
+            raise ProviderError("arquivo de saída grande demais")
+        buf = bytearray()
+        while chunk := resp.read(64 * 1024):
+            buf += chunk
+            if len(buf) > MAX_DOWNLOAD:
                 raise ProviderError("arquivo de saída grande demais")
-            buf = bytearray()
-            while chunk := r.read(64 * 1024):
-                buf += chunk
-                if len(buf) > MAX_DOWNLOAD:
-                    raise ProviderError("arquivo de saída grande demais")
-            return bytes(buf)
-    except urllib.error.HTTPError as e:
-        raise ProviderError(f"HTTP {e.code} ao baixar a saída") from e
-    except urllib.error.URLError as e:
-        raise ProviderError(f"sem conexão: {e.reason}") from e
+        return bytes(buf)
+    except OSError as e:
+        raise ProviderError(f"falha ao ler a saída: {e}") from e
+    finally:
+        conn.close()
 
 
 # ---------- OpenRouter ----------
