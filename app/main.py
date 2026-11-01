@@ -5,8 +5,8 @@
   /admin   painel (usuários, limites, keys cifradas, modelos, logs, arquivos)
 """
 import asyncio
+import hashlib
 import re
-import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -53,7 +53,18 @@ app.include_router(studio.files_router)
 app.include_router(admin.router)
 
 
-ASSET_VERSION = str(int(time.time()))
+def _asset_version() -> str:
+    """Hash do conteúdo de js/ e css/: muda só quando o arquivo muda, e é igual em todos os workers."""
+    h = hashlib.sha256()
+    for sub in ("js", "css"):
+        for p in sorted((STATIC_DIR / sub).rglob("*")):
+            if p.is_file():
+                h.update(p.relative_to(STATIC_DIR).as_posix().encode())
+                h.update(p.read_bytes())
+    return h.hexdigest()[:12]
+
+
+ASSET_VERSION = _asset_version()
 
 
 def _page(name: str) -> HTMLResponse:
