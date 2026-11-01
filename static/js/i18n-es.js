@@ -1211,3 +1211,4 @@ I18N.fromEnglish('es', {
 I18N.fromEnglish('es', {"Budget US$ {} split = {} tokens/person": "Presupuesto US$ {} dividido = {} tokens/persona", "Budget US$ {}/person = {} tokens/person": "Presupuesto US$ {}/persona = {} tokens/persona"});
 
 I18N.fromEnglish('es', {"Video tab: image, video, transition and edit nodes": "Pestaña de video: nodos de imagen, video, transición y montaje", "Characters tab (poses, spritesheet)": "Pestaña de personajes (posiciones, spritesheet)", "Products tab": "Pestaña de productos", "Delete own files": "Eliminar archivos propios"});
+I18N.fromEnglish('es', {"First frame": "Primer frame", "Last frame": "Último frame"});

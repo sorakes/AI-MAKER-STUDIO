@@ -298,8 +298,8 @@ function renderTabs() {
   if (!box) return;
   const tabs = cv.tabs[cv.ws] || [{ key: cv.ws, title: '' }];
   box.innerHTML = tabs.map((t, i) => `<div class="cv-tab ${t.key === cv.doc ? 'active' : ''}" data-tab="${t.key}" title="${esc(tabTitle(t, i))} · duplo clique para renomear">
-      <span class="cv-tab-name">${esc(tabTitle(t, i))}</span>${i ? `<button class="cv-tab-x" data-close="${t.key}" title="Fechar aba">${ic('x')}</button>` : ''}
-    </div>`).join('') + `<button class="cv-tab-add" id="cvTabAdd" title="Nova aba">${ic('plus')}</button>`;
+      <span class="cv-tab-name">${esc(tabTitle(t, i))}</span>${i ? `<button class="cv-tab-x" data-close="${t.key}" title="Fechar aba" aria-label="Fechar aba">${ic('x')}</button>` : ''}
+    </div>`).join('') + `<button class="cv-tab-add" id="cvTabAdd" title="Nova aba" aria-label="Nova aba">${ic('plus')}</button>`;
   box.querySelectorAll('.cv-tab').forEach((el) => {
     el.addEventListener('click', (e) => { if (!e.target.closest('[data-close]')) switchWorkspace(cv.ws, el.dataset.tab).catch((err) => toast(err.message)); });
     el.addEventListener('dblclick', () => renameTab(el.dataset.tab));
@@ -683,7 +683,7 @@ async function renderLibrary() {
   if (sig === renderLibrary._sig) return;
   renderLibrary._sig = sig;
   $('#cvLibrary').innerHTML = items.length ? items.map((m, i) =>
-    `<div class="cv-lib-item ${m.kind}" draggable="true" data-i="${i}" title="${esc(m.name)} · ${fmtBytes(m.size)}" ${m.thumb ? `style="background-image:url('${m.thumb}')"` : ''}>${m.kind === 'audio' ? ic('music') : ''}<span>${m.kind === 'video' ? ic('play') : m.kind === 'audio' ? 'áudio' : ic('image')}</span><button class="del" data-del="${i}" title="Apagar arquivo">${ic('trash')}</button></div>`).join('')
+    `<div class="cv-lib-item ${m.kind}" draggable="true" data-i="${i}" title="${esc(m.name)} · ${fmtBytes(m.size)}" ${m.thumb ? `style="background-image:url('${m.thumb}')"` : ''}>${m.kind === 'audio' ? ic('music') : ''}<span>${m.kind === 'video' ? ic('play') : m.kind === 'audio' ? 'áudio' : ic('image')}</span><button class="del" data-del="${i}" title="Apagar arquivo" aria-label="Apagar arquivo">${ic('trash')}</button></div>`).join('')
     : '<p class="cv-side-note">Nada ainda. Envie arquivos ou gere imagens/vídeos.</p>';
   document.querySelectorAll('.cv-lib-item').forEach((el) => {
     el.addEventListener('dragstart', (e) => e.dataTransfer.setData(DRAG_MEDIA, JSON.stringify(items[+el.dataset.i])));
@@ -772,9 +772,9 @@ function nodeEl(n) {
       <span class="cv-kicon">${ic(k.icon)}</span>
       <div class="cv-htext"><small>${k.label}</small><span class="title" spellcheck="false" title="Duplo clique para renomear">${esc(n.name)}</span></div>
       <span class="cv-dot ${n.status || 'idle'}" title="${esc(n.status || 'pronto para gerar')}"></span>
-      ${canRegen ? `<button class="cv-hbtn" data-act="regen" title="Regerar (nova variação)">${ic('refresh')}</button>` : ''}
-      ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó">${ic('copy')}</button>` : ''}
-      <button class="cv-hbtn x" title="Remover nó">${ic('x')}</button>
+      ${canRegen ? `<button class="cv-hbtn" data-act="regen" title="Regerar (nova variação)" aria-label="Regerar (nova variação)">${ic('refresh')}</button>` : ''}
+      ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
+      <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
     <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
@@ -828,9 +828,9 @@ function previewBlock(n, { placeholder, ghost } = {}) {
     ${media}
     ${running ? `<div class="cv-busy"><div class="cv-busy-txt">${ic('loader', 'spin')}<span>${esc(n.stage || 'gerando')}</span><b>${n.progress || 0}%</b></div><div class="cv-bar"><i style="width:${n.progress || 0}%"></i></div></div>` : ''}
     ${out && !running ? `<div class="cv-pv-tools">
-      ${takes.length > 1 ? `<div class="cv-takes"><button data-act="take" data-d="-1" title="Versão anterior">${ic('step-back')}</button><span>v${idx + 1}/${takes.length}</span><button data-act="take" data-d="1" title="Próxima versão">${ic('step-forward')}</button></div>` : '<span></span>'}
+      ${takes.length > 1 ? `<div class="cv-takes"><button data-act="take" data-d="-1" title="Versão anterior" aria-label="Versão anterior">${ic('step-back')}</button><span>v${idx + 1}/${takes.length}</span><button data-act="take" data-d="1" title="Próxima versão" aria-label="Próxima versão">${ic('step-forward')}</button></div>` : '<span></span>'}
       <div class="cv-pv-btns">
-        <button data-act="regen" title="Regerar: nova variação com o mesmo prompt">${ic('refresh')}</button>
+        <button data-act="regen" title="Regerar: nova variação com o mesmo prompt" aria-label="Regerar: nova variação com o mesmo prompt">${ic('refresh')}</button>
         <a href="${out.url}" target="_blank" rel="noopener" title="Abrir em tamanho real">${ic('external')}</a>
         <a href="${out.url}" download title="Baixar">${ic('download')}</a>
       </div></div>` : ''}
@@ -1028,7 +1028,7 @@ function refsBlock(n, hint) {
   return `<div class="cv-refs" data-role="refs" title="Solte aqui imagens da biblioteca ou do computador">
     <div class="cv-refs-head"><b>Referências</b><span>${esc(hint)}</span></div>
     <div class="cv-refs-row">
-      ${(n.refs || []).map((r, i) => `<div class="cv-ref" style="background-image:url('${r.url}')" title="${esc(r.name || '')}"><span>${i + 1}</span><button data-del="${i}" title="Remover">${ic('x')}</button></div>`).join('')}
+      ${(n.refs || []).map((r, i) => `<div class="cv-ref" style="background-image:url('${r.url}')" title="${esc(r.name || '')}"><span>${i + 1}</span><button data-del="${i}" title="Remover" aria-label="Remover">${ic('x')}</button></div>`).join('')}
       ${linked.map((u, j) => `<div class="cv-ref linked" style="background-image:url('${u}')" title="Ligada na porta R"><span>${(n.refs || []).length + j + 1}</span></div>`).join('')}
       <label class="cv-ref add" title="Enviar imagem de referência">${ic('plus')}<input type="file" accept="image/*" multiple hidden data-role="ref-file"></label>
     </div>

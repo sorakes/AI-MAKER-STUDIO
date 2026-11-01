@@ -133,10 +133,10 @@ function framePicker(role, video, dur, t, label) {
       <span class="mono" data-role="poslabel">${(+t).toFixed(2)}s</span>
     </div>
     <div class="tr-row">
-      <button class="btn small ghost" data-act="first">${ic('skip-back')}</button>
+      <button class="btn small ghost" data-act="first" aria-label="${t('Primeiro frame')}" title="${t('Primeiro frame')}">${ic('skip-back')}</button>
       <button class="btn small ghost" data-act="back">−1f</button>
       <button class="btn small ghost" data-act="fwd">+1f</button>
-      <button class="btn small ghost" data-act="last">${ic('skip-forward')}</button>
+      <button class="btn small ghost" data-act="last" aria-label="${t('Último frame')}" title="${t('Último frame')}">${ic('skip-forward')}</button>
       <button class="btn small primary" data-act="use">${ic('target')} ${role === 'a' ? 'A termina aqui' : 'B começa aqui'}</button>
     </div>
   </div>`;
@@ -188,7 +188,7 @@ function transitionBody(n) {
     <div class="cv-actions">
       <button class="btn ghost" data-act="plan" ${exit && entry ? '' : 'disabled'}>${ic('bulb')} Explicar câmera</button>
       ${mode === 'ai' ? `<button class="btn primary" data-act="bridge" ${!missing && n.status !== 'running' ? '' : 'disabled'}>${ic('sparkles')} Gerar transição</button>` : ''}
-      <button class="btn ghost" data-act="preview" title="Prévia A → transição → B" ${aVid || bVid ? '' : 'disabled'}>${ic('eye')}</button>
+      <button class="btn ghost" data-act="preview" title="Prévia A → transição → B" aria-label="Prévia A → transição → B" ${aVid || bVid ? '' : 'disabled'}>${ic('eye')}</button>
     </div>
 
     ${aVid || bVid ? `<details class="tr-fine"><summary>Ajuste fino: onde A termina / onde B começa</summary>

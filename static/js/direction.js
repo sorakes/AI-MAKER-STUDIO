@@ -334,8 +334,8 @@ function renderDzCards() {
     return `<div class="dz-card ${dz.active === l.color ? 'active' : ''}" data-color="${l.color}" style="--c:${c.hex}">
       <div class="dz-card-head">
         <span class="dz-swatch"></span><b>${c.label}</b><small>${cam ? 'rota da câmera' : 'elemento'} · ${shapesTxt}</small>
-        ${l.shapes.length ? `<button class="cv-hbtn" data-clear="${l.color}" title="Apagar traços desta cor">${ic('undo')}</button>` : ''}
-        ${cam ? '' : `<button class="cv-hbtn" data-remove="${l.color}" title="Remover elemento">${ic('trash')}</button>`}
+        ${l.shapes.length ? `<button class="cv-hbtn" data-clear="${l.color}" title="Apagar traços desta cor" aria-label="Apagar traços desta cor">${ic('undo')}</button>` : ''}
+        ${cam ? '' : `<button class="cv-hbtn" data-remove="${l.color}" title="Remover elemento" aria-label="Remover elemento">${ic('trash')}</button>`}
       </div>
       <textarea rows="${cam ? 3 : 2}" data-prompt="${l.color}" placeholder="${esc(cam ? DZ_PLACEHOLDER.camera : DZ_PLACEHOLDER.element)}">${esc(l.prompt)}</textarea>
       ${cam && !l.shapes.length ? '<small class="dz-tip">Desenhe em roxo por onde a câmera vai: o ponto é o começo e a seta, o fim.</small>' : ''}

@@ -1,0 +1,27 @@
+"""Acessibilidade mínima: erro do login anunciado e botões só-ícone com nome acessível."""
+import re
+
+from app import config
+
+
+def test_login_error_is_announced():
+    html = (config.STATIC_DIR / "login.html").read_text(encoding="utf-8")
+    m = re.search(r'<div[^>]*id="err"[^>]*>', html)
+    assert m and 'role="alert"' in m.group(0) and 'aria-live="assertive"' in m.group(0)
+
+
+def test_icon_only_buttons_have_accessible_name():
+    # botão cujo conteúdo é só um ícone ${ic(...)} precisa de aria-label
+    pat = re.compile(r"<button(?P<attrs>[^>]*)>\s*\$\{ic\([^)]*\)\}\s*</button>")
+    offenders = []
+    for f in (config.STATIC_DIR / "js").glob("*.js"):
+        for m in pat.finditer(f.read_text(encoding="utf-8")):
+            if "aria-label" not in m.group("attrs"):
+                offenders.append((f.name, m.group(0)[:100]))
+    assert offenders == []
+
+
+def test_static_icon_only_buttons_have_aria_label():
+    html = (config.STATIC_DIR / "studio.html").read_text(encoding="utf-8")
+    for m in re.finditer(r"<button([^>]*)>\s*<i data-ic=\"[^\"]*\"></i>\s*</button>", html):
+        assert "aria-label" in m.group(1), m.group(0)

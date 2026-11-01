@@ -91,9 +91,9 @@ async function loadUsers() {
         <td><small>${fmtDate(u.last_login)}</small></td>
         <td><div class="row-actions">
           <button class="btn small ghost" data-edit="${u.id}">Editar</button>
-          <button class="btn small ghost" data-files="${u.id}" title="Arquivos">${ic('folder')}</button>
-          <button class="btn small ghost" data-logs="${u.id}" title="Logs">${ic('list')}</button>
-          ${u.id !== state.me.id ? `<button class="btn small ghost" data-del="${u.id}" title="Excluir conta e arquivos">${ic('trash')}</button>` : ''}
+          <button class="btn small ghost" data-files="${u.id}" title="Arquivos" aria-label="Arquivos">${ic('folder')}</button>
+          <button class="btn small ghost" data-logs="${u.id}" title="Logs" aria-label="Logs">${ic('list')}</button>
+          ${u.id !== state.me.id ? `<button class="btn small ghost" data-del="${u.id}" title="Excluir conta e arquivos" aria-label="Excluir conta e arquivos">${ic('trash')}</button>` : ''}
         </div></td></tr>`;
     }).join('');
   document.querySelectorAll('[data-edit]').forEach((b) => { b.onclick = () => userDialog(A.users.find((u) => u.id === +b.dataset.edit)); });
@@ -202,13 +202,13 @@ async function loadModels() {
       <div class="kinds">Usado para: ${p.kinds.map((k) => t(KIND_LABEL[k])).join(', ')} · <a href="${p.site}" target="_blank" rel="noopener">obter key ${ic('external')}</a></div>
       <div class="keys">${p.keys.length ? p.keys.map((k) => `
         <div class="key-row ${k.enabled ? '' : 'off'}" data-k="${k.id}">
-          <button class="star ${k.is_default ? 'on' : ''}" data-act="kdefault" title="${k.is_default ? 'Key padrão do provedor' : 'Tornar padrão'}">${ic('star')}</button>
+          <button class="star ${k.is_default ? 'on' : ''}" data-act="kdefault" title="${k.is_default ? 'Key padrão do provedor' : 'Tornar padrão'}" aria-label="${k.is_default ? 'Key padrão do provedor' : 'Tornar padrão'}">${ic('star')}</button>
           <div class="key-main"><b>${esc(k.name)}</b><small class="mono">${esc(k.hint || '')}${k.models ? ` · usada por ${k.models} modelo(s)` : ''}${k.readable ? '' : ' · <span class="err">ilegível (SECRET_KEY mudou)</span>'}</small></div>
           <div class="row-actions">
             <button class="btn small ghost" data-act="ktest">Testar</button>
-            <button class="btn small ghost" data-act="krename" title="Renomear">${ic('pencil')}</button>
+            <button class="btn small ghost" data-act="krename" title="Renomear" aria-label="Renomear">${ic('pencil')}</button>
             <button class="btn small ghost" data-act="ktoggle">${k.enabled ? 'Desativar' : 'Ativar'}</button>
-            <button class="btn small ghost" data-act="kdel" title="Remover">${ic('trash')}</button>
+            <button class="btn small ghost" data-act="kdel" title="Remover" aria-label="Remover">${ic('trash')}</button>
           </div>
           <div class="key-result" data-role="kres"></div>
         </div>`).join('') : `<p class="note">${p.from_env ? 'Usando a key da variável de ambiente.' : 'Nenhuma key cadastrada.'}</p>`}</div>
@@ -369,7 +369,7 @@ function renderModels() {
     const list = A.models.filter((m) => m.kind === kind);
     return `<div class="model-group"><h5>${KIND_LABEL[kind]}</h5>${list.length ? list.map((m) => `
       <div class="model ${m.enabled ? '' : 'off'}" data-m="${m.id}">
-        <button class="star ${m.is_default ? 'on' : ''}" data-act="default" title="Padrão do Automático">${ic('star')}</button>
+        <button class="star ${m.is_default ? 'on' : ''}" data-act="default" title="Padrão do Automático" aria-label="Padrão do Automático">${ic('star')}</button>
         <div class="name"><b>${esc(m.label)}</b> <span class="tag">${esc(m.provider)}</span>${m.available ? ` <span class="tag key">${ic('key')} ${esc(m.key_name || 'padrão')}${m.key_id ? '' : ' (padrão)'}</span>` : ' <span class="tag err">sem key</span>'}
           <small>${esc(m.model_id)}</small><div class="caps">${capsTags(m)}</div></div>
         ${keySelect(m)}
@@ -377,8 +377,8 @@ function renderModels() {
         <div class="row-actions">
           <label class="inline" title="Aparece no estúdio"><input type="checkbox" data-act="enabled" ${m.enabled ? 'checked' : ''}> ativo</label>
           <button class="btn small ghost" data-act="edit">Editar</button>
-          <button class="btn small ghost" data-act="refresh" title="Reler capacidades e preço do provedor">${ic('refresh')}</button>
-          <button class="btn small ghost" data-act="delete" title="Remover">${ic('trash')}</button>
+          <button class="btn small ghost" data-act="refresh" title="Reler capacidades e preço do provedor" aria-label="Reler capacidades e preço do provedor">${ic('refresh')}</button>
+          <button class="btn small ghost" data-act="delete" title="Remover" aria-label="Remover">${ic('trash')}</button>
         </div>
       </div>`).join('') : '<p class="note">Nenhum modelo.</p>'}</div>`;
   }).join('');
@@ -709,7 +709,7 @@ async function loadGroups() {
     return `<div class="gcard" style="--g:${esc(g.color)}">
       <div class="gcard-head"><span class="gdot"></span><b>${esc(g.name)}</b>
         <small>${g.members.length} membro(s)${ms ? ` · ${ms} via Microsoft` : ''}</small>
-        <span class="row-actions"><button class="btn small ghost" data-gedit="${g.id}">Editar</button><button class="btn small ghost" data-gdel="${g.id}" title="Excluir grupo">${ic('trash')}</button></span></div>
+        <span class="row-actions"><button class="btn small ghost" data-gedit="${g.id}">Editar</button><button class="btn small ghost" data-gdel="${g.id}" title="Excluir grupo" aria-label="Excluir grupo">${ic('trash')}</button></span></div>
       ${g.description ? `<p class="note">${esc(g.description)}</p>` : ''}
       <div class="gperms">${perms}</div>
       ${(() => { const off = G.data.nodes.filter((n) => g.permissions[n.key] === false); return off.length ? `<div class="gmeta">Nodes bloqueados: ${off.map((n) => `<span class="tag off">${esc(n.label)}</span>`).join('')}</div>` : '<div class="gmeta">todos os nodes liberados</div>'; })()}
@@ -741,7 +741,7 @@ function groupModelsBlock(lim) {
 
 function rulesBlock(g) {
   if (!g) return '<p class="note">Salve o grupo para adicionar regras de atribuição automática.</p>';
-  return `<div class="rules">${g.rules.map((r) => `<div class="rule"><span class="tag">${esc(G.data.rule_types[r.type] || r.type)}</span><code>${esc(r.value)}</code><button type="button" class="btn small ghost" data-rdel="${r.id}" title="Remover regra">${ic('x')}</button></div>`).join('') || '<p class="note">Nenhuma regra.</p>'}</div>
+  return `<div class="rules">${g.rules.map((r) => `<div class="rule"><span class="tag">${esc(G.data.rule_types[r.type] || r.type)}</span><code>${esc(r.value)}</code><button type="button" class="btn small ghost" data-rdel="${r.id}" title="Remover regra" aria-label="Remover regra">${ic('x')}</button></div>`).join('') || '<p class="note">Nenhuma regra.</p>'}</div>
     <div class="rule-add"><select id="gRuleType">${Object.entries(G.data.rule_types).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select>
       <input id="gRuleValue" placeholder="ex.: empresa.com"><button type="button" class="btn small" id="gRuleAdd">${ic('plus')} Adicionar</button></div>`;
 }

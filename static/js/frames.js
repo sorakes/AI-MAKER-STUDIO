@@ -16,10 +16,10 @@ function framePickerHTML(video, dur, t, useLabel) {
       <span class="mono" data-role="poslabel">${(+t).toFixed(2)}s</span>
     </div>
     <div class="tr-row">
-      <button class="btn small ghost" data-act="first" title="Primeiro frame">${ic('skip-back')}</button>
+      <button class="btn small ghost" data-act="first" title="Primeiro frame" aria-label="Primeiro frame">${ic('skip-back')}</button>
       <button class="btn small ghost" data-act="back" title="1 frame para trás">−1f</button>
       <button class="btn small ghost" data-act="fwd" title="1 frame para frente">+1f</button>
-      <button class="btn small ghost" data-act="last" title="Último frame">${ic('skip-forward')}</button>
+      <button class="btn small ghost" data-act="last" title="Último frame" aria-label="Último frame">${ic('skip-forward')}</button>
       <button class="btn small primary" data-act="use">${useLabel}</button>
     </div>
   </div>`;

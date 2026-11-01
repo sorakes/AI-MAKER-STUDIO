@@ -124,7 +124,7 @@ function briefBody(n) {
         ${p.shots.map((s, i) => `<div class="cv-plan-shot">
           <span class="n">${i + 1}</span>
           <div><b>${esc(s.name)}</b><small>${s.duration}s · ${esc(camName(s.camera))}</small><p>${esc(s.intent)}</p>${s.why ? `<p class="why">${esc(s.why)}</p>` : ''}</div>
-          <button class="cv-hbtn" data-del="${i}" title="Tirar este plano">${ic('x')}</button>
+          <button class="cv-hbtn" data-del="${i}" title="Tirar este plano" aria-label="Tirar este plano">${ic('x')}</button>
         </div>`).join('')}
         ${p.notes ? `<p class="cv-side-note">${esc(p.notes)}</p>` : ''}
         ${p.compliance_note ? `<p class="cv-warn">${ic('alert')} ${esc(p.compliance_note)}</p>` : ''}

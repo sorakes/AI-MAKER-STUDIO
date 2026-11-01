@@ -334,9 +334,9 @@ function turnViewer(n) {
     <img src="${fr[i].url}" alt="" draggable="false">
     <span class="sh-turn-label">${esc(fr[i].node.label)} · ${i + 1}/${fr.length}</span>
     <div class="sh-turn-bar">
-      <button data-turn="-1" title="Girar para a esquerda">${ic('step-back')}</button>
-      <button data-turn="play" title="Girar sozinho">${ic(n.turning ? 'pause' : 'play')}</button>
-      <button data-turn="1" title="Girar para a direita">${ic('step-forward')}</button>
+      <button data-turn="-1" title="Girar para a esquerda" aria-label="Girar para a esquerda">${ic('step-back')}</button>
+      <button data-turn="play" title="Girar sozinho" aria-label="Girar sozinho">${ic(n.turning ? 'pause' : 'play')}</button>
+      <button data-turn="1" title="Girar para a direita" aria-label="Girar para a direita">${ic('step-forward')}</button>
       <input type="range" min="0" max="${fr.length - 1}" value="${i}" data-turn="range">
     </div>
   </div>`;
