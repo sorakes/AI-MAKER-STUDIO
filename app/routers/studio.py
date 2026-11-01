@@ -174,13 +174,13 @@ async def render(req: jobs.RenderRequest, user: dict = Depends(current_user)):
 
 
 @router.get("/jobs")
-def list_jobs(user: dict = Depends(current_user)):
-    return [_tok_job(j) for j in jobs.list_for(user)]
+async def list_jobs(user: dict = Depends(current_user)):
+    return [_tok_job(j) for j in await jobs.alist_for(user)]
 
 
 @router.get("/jobs/{job_id}")
-def get_job(job_id: str, user: dict = Depends(current_user)):
-    return _tok_job(jobs.get(job_id, user))
+async def get_job(job_id: str, user: dict = Depends(current_user)):
+    return _tok_job(await jobs.aget(job_id, user))
 
 
 class MontageRequest(BaseModel):
@@ -273,24 +273,26 @@ def _ws_key(user: dict, ws: str) -> str:
 
 
 @router.get("/canvas")
-def load_canvas(ws: str = "video", user: dict = Depends(current_user)):
+async def load_canvas(ws: str = "video", user: dict = Depends(current_user)):
     ws = _ws_key(user, ws)
-    r = db.one("SELECT doc FROM canvases WHERE user_id = ? AND ws = ?", (user["id"], ws))
+    r = await db.aone("SELECT doc FROM canvases WHERE user_id = ? AND ws = ?", (user["id"], ws))
     return json.loads(r["doc"]) if r else {"nodes": [], "edges": []}
 
 
 @router.post("/canvas")
-def save_canvas(doc: dict, ws: str = "video", user: dict = Depends(current_user)):
+async def save_canvas(doc: dict, ws: str = "video", user: dict = Depends(current_user)):
     ws = _ws_key(user, ws)
     raw = json.dumps(doc, ensure_ascii=False)
     if len(raw) > 5 * 2**20:
         raise HTTPException(413, "Canvas grande demais")
-    if "~" in ws and not db.one("SELECT 1 FROM canvases WHERE user_id = ? AND ws = ?", (user["id"], ws)):
-        n = db.one("SELECT COUNT(*) n FROM canvases WHERE user_id = ? AND ws LIKE ?", (user["id"], ws.split("~")[0] + "~%"))["n"]
-        if n >= 30:
-            raise HTTPException(400, "Limite de 30 abas por área")
-    db.run("INSERT INTO canvases(user_id, ws, doc, updated) VALUES(?,?,?,?) ON CONFLICT(user_id, ws) DO UPDATE SET "
-           "doc = excluded.doc, updated = excluded.updated", (user["id"], ws, raw, db.now()))
+    # checagem do limite de abas e gravação na mesma transação (sem corrida entre duas abas novas)
+    async with db.atx() as c:
+        if "~" in ws and not await (await c.execute("SELECT 1 FROM canvases WHERE user_id = ? AND ws = ?", (user["id"], ws))).fetchone():
+            cur = await c.execute("SELECT COUNT(*) n FROM canvases WHERE user_id = ? AND ws LIKE ?", (user["id"], ws.split("~")[0] + "~%"))
+            if (await cur.fetchone())["n"] >= 30:
+                raise HTTPException(400, "Limite de 30 abas por área")
+        await c.execute("INSERT INTO canvases(user_id, ws, doc, updated) VALUES(?,?,?,?) ON CONFLICT(user_id, ws) DO UPDATE SET "
+                        "doc = excluded.doc, updated = excluded.updated", (user["id"], ws, raw, db.now()))
     return {"ok": True}
 
 

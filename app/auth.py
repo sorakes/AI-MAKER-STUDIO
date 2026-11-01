@@ -1,4 +1,5 @@
 """Login por sessão (cookie HttpOnly), usuário corrente e bootstrap do primeiro admin."""
+import asyncio
 import json
 import secrets
 import time
@@ -106,9 +107,19 @@ def user_from_request(request: Request) -> dict | None:
     return public_user(u) if u else None
 
 
+async def auser_from_request(request: Request) -> dict | None:
+    """Versão async: a consulta de sessão vai pelo aiosqlite; grupos/limites (código sync) rodam em thread."""
+    token = request.cookies.get(COOKIE)
+    if not token:
+        return None
+    u = await db.aone("SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id "
+                      "WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1", (token_hash(token), time.time()))
+    return await asyncio.to_thread(public_user, u) if u else None
+
+
 async def current_user(request: Request) -> dict:
     # async: o ContextVar setado aqui vale para o endpoint (sync deps rodam em outra thread).
-    u = user_from_request(request)
+    u = await auser_from_request(request)
     if not u:
         raise HTTPException(401, "Faça login")
     CURRENT.set(u)

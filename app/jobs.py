@@ -124,18 +124,35 @@ def _save(job: dict):
            (job["id"], job["user_id"], job["created"], job["status"], json.dumps(job, ensure_ascii=False)))
 
 
-def get(job_id: str, user: dict) -> dict:
-    job = JOBS.get(job_id)
-    if not job:
-        row = db.one("SELECT data FROM jobs WHERE id = ?", (job_id,))
-        job = json.loads(row["data"]) if row else None
+def _visible(job: dict | None, user: dict) -> dict:
     if not job or (job["user_id"] != user["id"] and not user.get("is_admin", user.get("role") == "admin")):
         raise HTTPException(404, "Job não encontrado")
     return job
 
 
+def get(job_id: str, user: dict) -> dict:
+    job = JOBS.get(job_id)
+    if not job:
+        row = db.one("SELECT data FROM jobs WHERE id = ?", (job_id,))
+        job = json.loads(row["data"]) if row else None
+    return _visible(job, user)
+
+
+async def aget(job_id: str, user: dict) -> dict:
+    job = JOBS.get(job_id)
+    if not job:
+        row = await db.aone("SELECT data FROM jobs WHERE id = ?", (job_id,))
+        job = json.loads(row["data"]) if row else None
+    return _visible(job, user)
+
+
 def list_for(user: dict, limit: int = 50) -> list[dict]:
     rows = db.all_("SELECT data FROM jobs WHERE user_id = ? ORDER BY created DESC LIMIT ?", (user["id"], limit))
+    return [JOBS.get(json.loads(r["data"])["id"]) or json.loads(r["data"]) for r in rows]
+
+
+async def alist_for(user: dict, limit: int = 50) -> list[dict]:
+    rows = await db.aall("SELECT data FROM jobs WHERE user_id = ? ORDER BY created DESC LIMIT ?", (user["id"], limit))
     return [JOBS.get(json.loads(r["data"])["id"]) or json.loads(r["data"]) for r in rows]
 
 
