@@ -1,9 +1,13 @@
 """SQLite: usuários, sessões, provedores (keys cifradas), modelos, uso, jobs, canvas."""
+import asyncio
 import json
 import sqlite3
 import threading
 import time
-from contextlib import contextmanager
+import weakref
+from contextlib import asynccontextmanager, contextmanager
+
+import aiosqlite
 
 from .config import DB_PATH
 
@@ -180,3 +184,76 @@ def set_setting(key: str, value):
 
 def now() -> float:
     return time.time()
+
+
+# ---------- API async (aiosqlite) ----------
+# Usada pelas rotas async (o event loop não espera o SQLite). Uma conexão por event loop, com lock:
+# o aiosqlite roda numa thread própria, então é seguro chamar de corrotinas. Escritas e leituras
+# síncronas (threads de job/montagem) continuam pela conexão `_conn`; o WAL deixa as duas coexistirem.
+
+class _AsyncConn:
+    def __init__(self, conn: aiosqlite.Connection):
+        self.conn = conn
+        self.lock = asyncio.Lock()
+
+
+_aconns: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, _AsyncConn]" = weakref.WeakKeyDictionary()
+
+
+async def _aget() -> _AsyncConn:
+    loop = asyncio.get_running_loop()
+    ac = _aconns.get(loop)
+    if ac is None:
+        c = aiosqlite.connect(DB_PATH, timeout=30, isolation_level=None)
+        c.daemon = True  # não impede o processo de encerrar se a conexão ficar órfã (loop fechado)
+        conn = await c
+        conn.row_factory = sqlite3.Row
+        await conn.execute("PRAGMA busy_timeout = 30000")
+        await conn.execute("PRAGMA foreign_keys = ON")
+        ac = _aconns[loop] = _AsyncConn(conn)
+    return ac
+
+
+async def aall(sql: str, args=()) -> list[dict]:
+    ac = await _aget()
+    async with ac.lock:
+        cur = await ac.conn.execute(sql, args)
+        try:
+            return [dict(r) for r in await cur.fetchall()]
+        finally:
+            await cur.close()
+
+
+async def aone(sql: str, args=()) -> dict | None:
+    ac = await _aget()
+    async with ac.lock:
+        cur = await ac.conn.execute(sql, args)
+        try:
+            r = await cur.fetchone()
+        finally:
+            await cur.close()
+    return dict(r) if r else None
+
+
+async def arun(sql: str, args=()) -> int:
+    ac = await _aget()
+    async with ac.lock:
+        cur = await ac.conn.execute(sql, args)
+        try:
+            return cur.lastrowid or cur.rowcount
+        finally:
+            await cur.close()
+
+
+@asynccontextmanager
+async def atx():
+    """Transação atômica assíncrona: BEGIN IMMEDIATE (pega o lock de escrita já no início)."""
+    ac = await _aget()
+    async with ac.lock:
+        await ac.conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield ac.conn
+        except BaseException:
+            await ac.conn.execute("ROLLBACK")
+            raise
+        await ac.conn.execute("COMMIT")
