@@ -157,10 +157,10 @@ async def alist_for(user: dict, limit: int = 50) -> list[dict]:
 
 
 def _pending(uid: int) -> dict:
+    """Pendências do usuário lidas do banco (fonte da verdade); o dict JOBS é só cache de quem está rodando."""
     out = {"images": 0, "videos": 0, "spend": 0.0}
-    for j in JOBS.values():
-        if j["user_id"] != uid or j["status"] not in ("queued", "running"):
-            continue
+    for row in db.all_("SELECT data FROM jobs WHERE user_id = ? AND status IN ('queued', 'running')", (uid,)):
+        j = json.loads(row["data"])
         todo = [s for s in j["steps"] if s["status"] != "done"]
         out["images"] += sum(s["kind"] == "image" for s in todo)
         out["videos"] += sum(s["kind"] == "video" for s in todo)
@@ -251,10 +251,14 @@ async def _or_video(job: dict, st: dict, m: dict, i: int, n: int, prompt: str, s
         _save(job)
     errors = 0
     deadline = st.get("started", time.time()) + VIDEO_TIMEOUT_S
+    last_saved = 0.0
     while True:
         if time.time() > deadline:
             raise providers.ProviderError(f"timeout: o vídeo não ficou pronto em {VIDEO_TIMEOUT_S // 60} min")
         await asyncio.sleep(5)
+        if time.time() - last_saved > 15:  # progresso no banco: após reinício a tela mostra o último estado
+            last_saved = time.time()
+            await asyncio.to_thread(_save, job)
         try:
             s = await asyncio.to_thread(providers.or_video_status, st["handle"])
             errors = 0
