@@ -7,6 +7,7 @@
 import asyncio
 import hashlib
 import re
+import urllib.parse
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -14,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 from . import assets, auth, branding, db, groups, jobs, registry
-from .config import STATIC_DIR
+from .config import PUBLIC_URL, STATIC_DIR
 from .routers import admin, studio
 from .routers import auth as auth_routes
 
@@ -32,6 +33,23 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI Studio", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+
+
+_MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+@app.middleware("http")
+async def same_origin_writes(request: Request, call_next):
+    """Anti-CSRF: em escrita, Origin (ou Referer) precisa ser o próprio host ou PUBLIC_URL.
+    Sem Origin/Referer (cliente não-browser) a requisição passa; cookie SameSite=Lax cobre o resto."""
+    if request.method in _MUTATING:
+        src = request.headers.get("origin") or request.headers.get("referer")
+        if src:
+            netloc = urllib.parse.urlsplit(src).netloc.lower()
+            allowed = {(request.headers.get("host") or "").lower(), urllib.parse.urlsplit(PUBLIC_URL).netloc.lower()}
+            if not netloc or netloc not in allowed:
+                return JSONResponse({"detail": "Origem não permitida"}, status_code=403)
+    return await call_next(request)
 
 
 @app.middleware("http")

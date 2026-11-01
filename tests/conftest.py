@@ -40,6 +40,8 @@ def _isolate(client):
 @pytest.fixture
 def make_user():
     def _make(email: str, password: str = "senha-123", role: str = "user", active: int = 1) -> dict:
+        if existing := db.one("SELECT * FROM users WHERE email = ?", (email,)):
+            return existing
         db.run("INSERT INTO users(email, name, password_hash, role, active, limits, created_at) VALUES(?,?,?,?,?,?,?)",
                (email, email.split("@")[0], hash_password(password), role, active,
                 json.dumps({k: None for k in auth.DEFAULT_LIMITS}), time.time()))
