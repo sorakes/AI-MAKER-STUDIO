@@ -458,3 +458,7 @@ I18N.add('en', {
  "{} · na biblioteca": "{} · in the library",
  "{} posições serão criadas · na biblioteca": "{} poses will be created · in the library"
 });
+
+I18N.add('en', {"Verba US$ {} dividida = {} tokens/pessoa": "Budget US$ {} split = {} tokens/person", "Verba US$ {}/pessoa = {} tokens/pessoa": "Budget US$ {}/person = {} tokens/person"});
+
+I18N.add('en', {"Aba de vídeo: nós de imagem, vídeo, transição e montagem": "Video tab: image, video, transition and edit nodes", "Aba de personagens (posições, spritesheet)": "Characters tab (poses, spritesheet)", "Aba de produtos": "Products tab", "Apagar arquivos próprios": "Delete own files", "Gerar imagens": "Generate images", "Gerar vídeos": "Generate videos", "Enviar arquivos": "Upload files", "Apagar arquivos": "Delete files", "Painel admin": "Admin panel", "Assistentes de IA": "AI assistants", "Montagem": "Edit", "Extrair frame": "Extract frame", "Aprovação": "Approval"});

@@ -689,7 +689,7 @@ function limitSummary(lim, budgetTok) {
   const parts = lim.budget_usd != null ? [`Verba US$ ${lim.budget_usd}${lim.budget_split ? ' dividida' : '/pessoa'} = ${Number(budgetTok || 0).toLocaleString(LOC)} tokens/pessoa`] : [];
   parts.push(...LIMIT_FIELDS.filter(([k]) => k in lim && !(k === 'tokens_month' && lim.budget_usd != null)).map(([k, label]) => `${label.replace(' por mês', '/mês')}: ${lim[k] == null ? '∞' : lim[k]}`));
   if ('models' in lim) parts.push(lim.models == null ? 'todos os modelos' : `${lim.models.length} modelo(s)`);
-  return parts.length ? parts.join(' · ') : 'limites padrão';
+  return parts.length ? parts.map((x) => t(x)).join(' · ') : 'limites padrão'; // cada parte traduz sozinha
 }
 
 async function loadGroups() {

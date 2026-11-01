@@ -1,5 +1,7 @@
 # AI Maker Studio
 
+![AI Maker Studio tour: admin (users, groups, token budgets, Microsoft sign-in, encrypted keys, audit logs) and then the studio (multi-reference video, model picker, token gauge, inventory, languages)](docs/demo.gif)
+
 An AI commercial and video production studio: a node canvas (script, cast/product, image, video, transition, frame, approval and edit) where every person has their own workspace, plus an admin panel that controls accounts, groups, token budgets, API keys and models.
 
 Images and videos are generated through the [OpenRouter](https://openrouter.ai) API, so no local GPU is needed.
