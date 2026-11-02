@@ -90,6 +90,12 @@ def list_files(uid: int | None = None) -> list[dict]:
                     gif_thumb(f)
                 except Exception:  # noqa: BLE001 - miniatura é opcional
                     pass
+            elif kind_of(f) == "video" and not f.with_name(f"{f.stem}_first.png").exists():
+                try:  # vídeos antigos (ex.: cortes feitos antes da miniatura) ganham o 1º quadro na primeira listagem
+                    from .media import extract_frame
+                    extract_frame(f, last=False)
+                except Exception:  # noqa: BLE001 - miniatura é opcional
+                    pass
             out.append({"url": to_url(f), "name": f.name, "folder": f.parent.name, "kind": kind_of(f),
                         "size": st.st_size, "mtime": st.st_mtime, "user_id": int(root.name)})
     return sorted(out, key=lambda x: -x["mtime"])
