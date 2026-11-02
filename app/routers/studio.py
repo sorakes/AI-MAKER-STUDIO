@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, camera, db, extend, groups, lipsync, providers, sprites, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, camera, db, extend, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -404,6 +404,18 @@ async def direction_interpret(req: direction.DirectionRequest, user: dict = Depe
 async def director_plan(req: director.PlanRequest, user: dict = Depends(need("ai_assist"))):
     require(user, "node_brief")
     return await asyncio.to_thread(director.plan, req)
+
+
+@router.post("/storyboard/plan")
+async def storyboard_plan(req: storyboard.PlanRequest, user: dict = Depends(need("ai_assist"))):
+    """Briefing -> plano com N planos (só texto; nada é gerado). Os nós são criados no front."""
+    require(user, "node_brief")
+    try:
+        out = await asyncio.to_thread(storyboard.build_plan, req)
+    except storyboard.StoryboardError as e:
+        raise HTTPException(503, str(e)) from e
+    out["estimate"]["tokens_per_usd"] = await groups.atoken_rate()  # o usuário vê tokens, como no resto do app
+    return out
 
 
 @router.post("/autoprompt")
