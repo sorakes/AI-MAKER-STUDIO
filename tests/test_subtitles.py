@@ -134,7 +134,7 @@ def test_stt_json_is_parsed_even_inside_fences():
 
 def test_translation_keeps_order_and_length(monkeypatch):
     segs = [{"start": 0, "end": 1, "text": "bom dia"}, {"start": 1, "end": 2, "text": "tchau"}]
-    monkeypatch.setattr(llm, "chat", lambda *a, **k: json.dumps({"texts": ["good morning", "bye"]}))
+    monkeypatch.setattr(llm, "chat_priced", lambda *a, **k: (json.dumps({"texts": ["good morning", "bye"]}), 0.0004))
     out = subtitles.translate(segs, "en")
     assert [s["text"] for s in out] == ["good morning", "bye"]
     assert [(s["start"], s["end"]) for s in out] == [(0, 1), (1, 2)]
@@ -142,10 +142,10 @@ def test_translation_keeps_order_and_length(monkeypatch):
 
 def test_translation_refuses_mismatched_or_missing_model(monkeypatch):
     segs = [{"start": 0, "end": 1, "text": "a"}, {"start": 1, "end": 2, "text": "b"}]
-    monkeypatch.setattr(llm, "chat", lambda *a, **k: json.dumps({"texts": ["só uma"]}))
+    monkeypatch.setattr(llm, "chat_priced", lambda *a, **k: (json.dumps({"texts": ["só uma"]}), 0.0))
     with pytest.raises(ValueError, match="número de linhas"):
         subtitles.translate(segs, "pt")
-    monkeypatch.setattr(llm, "chat", lambda *a, **k: None)
+    monkeypatch.setattr(llm, "chat_priced", lambda *a, **k: (None, 0.0))
     with pytest.raises(ValueError, match="Tradução indisponível"):
         subtitles.translate(segs, "pt")
 
@@ -238,3 +238,20 @@ def test_subtitles_job_end_to_end_with_srt_export(me, no_ai, login, make_user, m
     assert abs(media.probe(storage.resolve(started[0]["output"], me2))["duration"] - 3.0) < 0.3
     srt_path = storage.resolve(started[0]["result"]["srt_url"], me2)
     assert "frase curta" in srt_path.read_text(encoding="utf-8")  # o .srt guarda o texto original
+
+
+@needs_ffmpeg
+def test_translation_cost_is_charged_on_the_subtitles_job(login, make_user, no_ai, monkeypatch):
+    monkeypatch.setattr(llm, "chat_priced", lambda *a, **k: (json.dumps({"texts": ["good morning"]}), 0.0004))
+    started = []
+    monkeypatch.setattr(jobs, "start", lambda job, user, resume=False: started.append(job))
+    u = make_user(f"subs-cost-{_uniq()}@test.local")
+    c = login(u["email"], c=TestClient(app))
+    me2 = auth.public_user(u)
+    url, _ = _mine_video(me2)
+    r = c.post("/api/video/subtitles", json={"source_url": url, "translate_to": "en",
+                                             "segments": [{"start": 0.2, "end": 1.5, "text": "bom dia"}]})
+    assert r.status_code == 200, r.text
+    asyncio.run(jobs._run(started[0], me2))
+    assert started[0]["status"] == "done", started[0].get("error")
+    assert abs(sum(s["cost"] for s in started[0]["steps"]) - 0.0004) < 1e-9  # a tradução não sai de graça

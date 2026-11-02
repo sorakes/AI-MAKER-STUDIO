@@ -24,9 +24,14 @@ def source() -> str:
 
 
 def chat(messages: list[dict], kind: str = "text", as_json: bool = False, timeout: float = 90) -> str | None:
+    return chat_priced(messages, kind, as_json, timeout)[0]
+
+
+def chat_priced(messages: list[dict], kind: str = "text", as_json: bool = False, timeout: float = 90) -> tuple[str | None, float]:
+    """Como chat, mas devolve também o custo real do provedor (US$), para quem precisa cobrar no job."""
     m = _model(kind) or (_model("text") if kind == "vision" else None)
     if not m:
-        return None
+        return None, 0.0
     lang = LANG.get()
     if lang != "pt":  # instruções pedem pt-BR nos campos para o usuário: troca pelo idioma da interface
         messages = [{"role": "system", "content": (
@@ -36,10 +41,10 @@ def chat(messages: list[dict], kind: str = "text", as_json: bool = False, timeou
     try:
         msg, cost = providers.openrouter_chat(m["model_id"], messages, as_json=as_json, timeout=timeout, key_id=m.get("key_id"))
         usage.log(kind, provider=m["provider"], model=m["model_id"], cost=cost, detail={"key": m.get("key_name") or ""})
-        return msg.get("content")
+        return msg.get("content"), float(cost or 0.0)
     except providers.ProviderError as e:
         usage.log(kind, provider=m["provider"], model=m["model_id"], status="error", detail=str(e))
-        return None
+        return None, 0.0
 
 
 def chat_json(system: str, user: str) -> dict | None:

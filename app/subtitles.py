@@ -236,17 +236,19 @@ def transcribe_wav(wav: Path, language: str = "") -> dict:
     return parse_stt(raw)
 
 
-def translate(segments: list[dict], target: str) -> list[dict]:
-    """Traduz o texto de cada segmento, em lote, mantendo a ordem e os tempos."""
+def translate(segments: list[dict], target: str, cost_out: list | None = None) -> list[dict]:
+    """Traduz o texto de cada segmento, em lote, mantendo a ordem e os tempos. O custo real vai para cost_out."""
     if target not in LANGS:
         raise ValueError("idioma de destino inválido")
     names = {"en": "English", "pt": "Brazilian Portuguese", "es": "Spanish"}
     texts = [s["text"] for s in segments]
-    raw = llm.chat([
+    raw, cost = llm.chat_priced([
         {"role": "system", "content": (f"Translate each subtitle line into {names[target]}. Keep the same number of "
                                        "items and the same order. Reply ONLY JSON: {\"texts\": [...]}.")},
         {"role": "user", "content": json.dumps(texts, ensure_ascii=False)},
     ], kind="text", as_json=True, timeout=120)
+    if cost_out is not None:
+        cost_out.append(cost)
     if not raw:
         raise ValueError("Tradução indisponível: configure um modelo de texto")
     try:
