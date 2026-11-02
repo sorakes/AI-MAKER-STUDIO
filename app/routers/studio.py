@@ -31,8 +31,8 @@ def models(user: dict = Depends(current_user)):
             for k in ("image", "video")}
 
 
-def _tok_job(job: dict) -> dict:
-    rate = groups.token_rate()
+def _tok_job(job: dict, rate: float | None = None) -> dict:
+    rate = rate if rate is not None else groups.token_rate()
     job = {**job, "est_cost": round((job.get("est_cost") or 0) * rate, 2),
            "steps": [{**s, "est": round((s.get("est") or 0) * rate, 2), "cost": round((s.get("cost") or 0) * rate, 2)}
                      for s in job.get("steps", [])]}
@@ -89,8 +89,8 @@ def save_asset(asset_id: str, body: assets.SaveBody, user: dict = Depends(need("
 
 @router.post("/assets/{asset_id}/generate")
 async def generate_asset(asset_id: str, body: assets.GenerateBody, user: dict = Depends(current_user)):
-    _ws_asset(user, assets.get(asset_id, user)["kind"])
-    out = assets.generate(asset_id, user, body)
+    _ws_asset(user, (await assets.aget(asset_id, user))["kind"])
+    out = await asyncio.to_thread(assets.generate, asset_id, user, body)
     return {**out, "jobs": [_tok_job(j) for j in out["jobs"]]}
 
 
@@ -114,11 +114,11 @@ def pose_prompt(asset_id: str, body: PosePromptBody, user: dict = Depends(curren
 
 @router.post("/assets/{asset_id}/pose-render")
 async def pose_render(asset_id: str, body: sprites.PoseRender, user: dict = Depends(current_user)):
-    a = assets.get(asset_id, user)
+    a = await assets.aget(asset_id, user)
     _ws_asset(user, a["kind"])
     try:
-        out = sprites.render_pose(user, a, body)
-        return {**out, "job": _tok_job(out["job"])}
+        out = await asyncio.to_thread(sprites.render_pose, user, a, body)
+        return {**out, "job": _tok_job(out["job"], await groups.atoken_rate())}
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
@@ -133,12 +133,12 @@ async def spritesheet(body: sprites.SheetBody, user: dict = Depends(current_user
     if not (user["permissions"]["ws_character"] or user["permissions"]["ws_product"]):
         require(user, "ws_character")
     require(user, "node_sheet")
-    storage.check_quota(user)
+    await asyncio.to_thread(storage.check_quota, user)
     try:
         out = await asyncio.to_thread(sprites.build_sheet, user, body)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    usage.log("montage", detail={"spritesheet": len(body.urls)})
+    await usage.alog("montage", detail={"spritesheet": len(body.urls)})
     return out
 
 
@@ -170,17 +170,20 @@ async def plan_transition(req: transitions.PlanRequest, user: dict = Depends(nee
 
 @router.post("/render")
 async def render(req: jobs.RenderRequest, user: dict = Depends(current_user)):
-    return _tok_job(jobs.submit(user, req))
+    job = await asyncio.to_thread(jobs.prepare, user, req)  # checagens e banco fora do loop
+    jobs.start(job, user)
+    return _tok_job(job, await groups.atoken_rate())
 
 
 @router.get("/jobs")
-def list_jobs(user: dict = Depends(current_user)):
-    return [_tok_job(j) for j in jobs.list_for(user)]
+async def list_jobs(user: dict = Depends(current_user)):
+    rate = await groups.atoken_rate()
+    return [_tok_job(j, rate) for j in await jobs.alist_for(user)]
 
 
 @router.get("/jobs/{job_id}")
-def get_job(job_id: str, user: dict = Depends(current_user)):
-    return _tok_job(jobs.get(job_id, user))
+async def get_job(job_id: str, user: dict = Depends(current_user)):
+    return _tok_job(await jobs.aget(job_id, user), await groups.atoken_rate())
 
 
 class MontageRequest(BaseModel):
@@ -191,15 +194,15 @@ class MontageRequest(BaseModel):
 
 @router.post("/montage")
 async def montage_cut(req: MontageRequest, user: dict = Depends(need("node_montage"))):
-    storage.check_quota(user)
+    await asyncio.to_thread(storage.check_quota, user)
     items = [{**i, "path": storage.resolve(i["url"], user)} if i.get("type") == "clip" else i for i in req.items]
     audio = storage.resolve(req.audio_url, user) if req.audio_url else None
     try:
         out = await asyncio.to_thread(montage.assemble_sequence, user["id"], items, req.aspect, audio)
     except (RuntimeError, ValueError) as e:
-        usage.log("montage", status="error", detail=str(e)[:300])
+        await usage.alog("montage", status="error", detail=str(e)[:300])
         raise HTTPException(400, str(e)) from e
-    usage.log("montage", detail={"clips": sum(1 for i in items if i.get("type") == "clip")})
+    await usage.alog("montage", detail={"clips": sum(1 for i in items if i.get("type") == "clip")})
     return {"url": storage.to_url(out), "shots": sum(1 for i in items if i.get("type") == "clip")}
 
 
@@ -210,12 +213,12 @@ async def upload(file: UploadFile, user: dict = Depends(need("upload"))):
     data = await file.read(MAX_UPLOAD_MB * 2**20 + 1)
     if len(data) > MAX_UPLOAD_MB * 2**20:
         raise HTTPException(413, f"Arquivo maior que {MAX_UPLOAD_MB} MB")
-    storage.check_quota(user, len(data))
+    await asyncio.to_thread(storage.check_quota, user, len(data))
     try:
         m = await asyncio.to_thread(media.save_upload, user["id"], file.filename or "arquivo", data)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(400, f"Falha ao processar mídia: {e}") from e
-    usage.log("upload", detail={"file": m["name"], "bytes": len(data)})
+    await usage.alog("upload", detail={"file": m["name"], "bytes": len(data)})
     return m
 
 
@@ -273,24 +276,26 @@ def _ws_key(user: dict, ws: str) -> str:
 
 
 @router.get("/canvas")
-def load_canvas(ws: str = "video", user: dict = Depends(current_user)):
+async def load_canvas(ws: str = "video", user: dict = Depends(current_user)):
     ws = _ws_key(user, ws)
-    r = db.one("SELECT doc FROM canvases WHERE user_id = ? AND ws = ?", (user["id"], ws))
+    r = await db.aone("SELECT doc FROM canvases WHERE user_id = ? AND ws = ?", (user["id"], ws))
     return json.loads(r["doc"]) if r else {"nodes": [], "edges": []}
 
 
 @router.post("/canvas")
-def save_canvas(doc: dict, ws: str = "video", user: dict = Depends(current_user)):
+async def save_canvas(doc: dict, ws: str = "video", user: dict = Depends(current_user)):
     ws = _ws_key(user, ws)
     raw = json.dumps(doc, ensure_ascii=False)
     if len(raw) > 5 * 2**20:
         raise HTTPException(413, "Canvas grande demais")
-    if "~" in ws and not db.one("SELECT 1 FROM canvases WHERE user_id = ? AND ws = ?", (user["id"], ws)):
-        n = db.one("SELECT COUNT(*) n FROM canvases WHERE user_id = ? AND ws LIKE ?", (user["id"], ws.split("~")[0] + "~%"))["n"]
-        if n >= 30:
-            raise HTTPException(400, "Limite de 30 abas por área")
-    db.run("INSERT INTO canvases(user_id, ws, doc, updated) VALUES(?,?,?,?) ON CONFLICT(user_id, ws) DO UPDATE SET "
-           "doc = excluded.doc, updated = excluded.updated", (user["id"], ws, raw, db.now()))
+    # checagem do limite de abas e gravação na mesma transação (sem corrida entre duas abas novas)
+    async with db.atx() as c:
+        if "~" in ws and not await (await c.execute("SELECT 1 FROM canvases WHERE user_id = ? AND ws = ?", (user["id"], ws))).fetchone():
+            cur = await c.execute("SELECT COUNT(*) n FROM canvases WHERE user_id = ? AND ws LIKE ?", (user["id"], ws.split("~")[0] + "~%"))
+            if (await cur.fetchone())["n"] >= 30:
+                raise HTTPException(400, "Limite de 30 abas por área")
+        await c.execute("INSERT INTO canvases(user_id, ws, doc, updated) VALUES(?,?,?,?) ON CONFLICT(user_id, ws) DO UPDATE SET "
+                        "doc = excluded.doc, updated = excluded.updated", (user["id"], ws, raw, db.now()))
     return {"ok": True}
 
 

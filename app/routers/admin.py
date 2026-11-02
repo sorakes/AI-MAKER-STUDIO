@@ -1,4 +1,5 @@
 """Painel admin: usuários, limites, keys, modelos, logs e arquivos."""
+import asyncio
 import json
 import time
 
@@ -105,7 +106,8 @@ def put_branding(body: dict):
 
 @router.post("/branding/logo")
 async def upload_logo(file: UploadFile):
-    b = branding.save_logo(file.filename or "logo.png", await file.read(4 * 2**20 + 1))
+    data = await file.read(4 * 2**20 + 1)
+    b = await asyncio.to_thread(branding.save_logo, file.filename or "logo.png", data)
     return {**b, "themes": branding.THEMES}
 
 

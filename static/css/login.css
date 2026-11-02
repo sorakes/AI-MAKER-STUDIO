@@ -1,0 +1,30 @@
+    :root { --bg: #07090d; --panel: #10141c; --line: #232a36; --text: #eef1f6; --muted: #8b95a7; --accent: #10b981; --err: #f87171; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: radial-gradient(1200px 600px at 20% -10%, #10b98122, transparent), var(--bg);
+      color: var(--text); font-family: Inter, system-ui, sans-serif; padding: 16px; }
+    .card { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 32px 28px; box-shadow: 0 30px 80px #0008; }
+    .logo { font-weight: 800; font-size: 20px; letter-spacing: .5px; margin-bottom: 4px; }
+    .logo { display: flex; align-items: center; gap: 8px; }
+    p.sub { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; font-weight: 600; letter-spacing: .3px; }
+    input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: #0a0d13; color: var(--text); font: inherit; font-size: 15px; }
+    input:focus { outline: none; border-color: var(--accent); }
+    button { width: 100%; margin-top: 22px; padding: 12px; border: 0; border-radius: 10px; background: var(--accent); color: #022c1e; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .ms { display: none; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-top: 18px; padding: 11px; background: #0a0d13; color: var(--text);
+      border: 1px solid var(--line); border-radius: 10px; font-weight: 600; font-size: 14px; text-decoration: none; }
+    .ms:hover { border-color: var(--accent); }
+    .ms svg { flex: 0 0 auto; }
+    .or { display: none; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin-top: 18px; }
+    .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+    body.has-ms .ms, body.has-ms .or { display: flex; }
+    body.pixel .ms { border-radius: 0; border-width: 2px; }
+    .err { color: var(--err); font-size: 13px; min-height: 18px; margin-top: 12px; }
+    body.pixel .card { border-radius: 0; border-width: 2px; box-shadow: 8px 8px 0 #0009; }
+    body.pixel input { border-radius: 0; border-width: 2px; box-shadow: inset 2px 2px 0 #0008; }
+    body.pixel button { border-radius: 0; box-shadow: 0 -3px 0 0 #0006, 0 3px 0 0 #0006, -3px 0 0 0 #0006, 3px 0 0 0 #0006, inset 0 -3px 0 #0005; }
+    body.pixel button:active { transform: translateY(2px); }
+    .lang { margin-top: 14px; width: 100%; background: transparent; color: var(--muted, #8a93a6); border: 1px solid rgba(255,255,255,.12); padding: 6px 8px; font: inherit; font-size: .8rem; }
+
+/* esconde a página até as traduções carregarem (js/i18n.js); some sozinho em 1,5 s */
+html.i18n-wait body { visibility: hidden; }

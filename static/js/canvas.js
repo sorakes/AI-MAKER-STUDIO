@@ -298,8 +298,8 @@ function renderTabs() {
   if (!box) return;
   const tabs = cv.tabs[cv.ws] || [{ key: cv.ws, title: '' }];
   box.innerHTML = tabs.map((t, i) => `<div class="cv-tab ${t.key === cv.doc ? 'active' : ''}" data-tab="${t.key}" title="${esc(tabTitle(t, i))} · duplo clique para renomear">
-      <span class="cv-tab-name">${esc(tabTitle(t, i))}</span>${i ? `<button class="cv-tab-x" data-close="${t.key}" title="Fechar aba">${ic('x')}</button>` : ''}
-    </div>`).join('') + `<button class="cv-tab-add" id="cvTabAdd" title="Nova aba">${ic('plus')}</button>`;
+      <span class="cv-tab-name">${esc(tabTitle(t, i))}</span>${i ? `<button class="cv-tab-x" data-close="${t.key}" title="Fechar aba" aria-label="Fechar aba">${ic('x')}</button>` : ''}
+    </div>`).join('') + `<button class="cv-tab-add" id="cvTabAdd" title="Nova aba" aria-label="Nova aba">${ic('plus')}</button>`;
   box.querySelectorAll('.cv-tab').forEach((el) => {
     el.addEventListener('click', (e) => { if (!e.target.closest('[data-close]')) switchWorkspace(cv.ws, el.dataset.tab).catch((err) => toast(err.message)); });
     el.addEventListener('dblclick', () => renameTab(el.dataset.tab));
@@ -650,16 +650,33 @@ function bindBoard() {
   applyView();
 }
 
+function announceUpload(msg) {
+  const el = $('#uploadStatus');
+  if (el) el.textContent = msg;
+}
+
 async function uploadFiles(files, at) {
+  const btn = document.querySelector('.cv-upload');
+  btn?.setAttribute('aria-busy', 'true');
+  try {
+    await uploadEach(files, at);
+  } finally {
+    btn?.removeAttribute('aria-busy');
+  }
+}
+
+async function uploadEach(files, at) {
   for (const [i, f] of files.entries()) {
     toast(`Enviando ${f.name}…`);
+    announceUpload(`Enviando ${f.name}`);
     try {
       const m = await uploadFile(f);
+      announceUpload(`${f.name} enviado`);
       renderLibrary._sig = null;
       renderLibrary();
       if (m.kind === 'audio') { toast(`${f.name} em Meus arquivos: arraste para uma Montagem`); continue; }
       addMediaNode({ ...m, name: f.name }, { x: at.x + i * 30, y: at.y + i * 30 });
-    } catch (err) { toast(`Erro no upload: ${err.message}`); }
+    } catch (err) { toast(`Erro no upload: ${err.message}`); announceUpload(`Erro no upload de ${f.name}: ${err.message}`); }
   }
 }
 
@@ -683,7 +700,7 @@ async function renderLibrary() {
   if (sig === renderLibrary._sig) return;
   renderLibrary._sig = sig;
   $('#cvLibrary').innerHTML = items.length ? items.map((m, i) =>
-    `<div class="cv-lib-item ${m.kind}" draggable="true" data-i="${i}" title="${esc(m.name)} · ${fmtBytes(m.size)}" ${m.thumb ? `style="background-image:url('${m.thumb}')"` : ''}>${m.kind === 'audio' ? ic('music') : ''}<span>${m.kind === 'video' ? ic('play') : m.kind === 'audio' ? 'áudio' : ic('image')}</span><button class="del" data-del="${i}" title="Apagar arquivo">${ic('trash')}</button></div>`).join('')
+    `<div class="cv-lib-item ${m.kind}" draggable="true" data-i="${i}" title="${esc(m.name)} · ${fmtBytes(m.size)}" ${m.thumb ? `data-st="background-image:url('${m.thumb}')"` : ''}>${m.kind === 'audio' ? ic('music') : ''}<span>${m.kind === 'video' ? ic('play') : m.kind === 'audio' ? 'áudio' : ic('image')}</span><button class="del" data-del="${i}" title="Apagar arquivo" aria-label="Apagar arquivo">${ic('trash')}</button></div>`).join('')
     : '<p class="cv-side-note">Nada ainda. Envie arquivos ou gere imagens/vídeos.</p>';
   document.querySelectorAll('.cv-lib-item').forEach((el) => {
     el.addEventListener('dragstart', (e) => e.dataTransfer.setData(DRAG_MEDIA, JSON.stringify(items[+el.dataset.i])));
@@ -772,9 +789,9 @@ function nodeEl(n) {
       <span class="cv-kicon">${ic(k.icon)}</span>
       <div class="cv-htext"><small>${k.label}</small><span class="title" spellcheck="false" title="Duplo clique para renomear">${esc(n.name)}</span></div>
       <span class="cv-dot ${n.status || 'idle'}" title="${esc(n.status || 'pronto para gerar')}"></span>
-      ${canRegen ? `<button class="cv-hbtn" data-act="regen" title="Regerar (nova variação)">${ic('refresh')}</button>` : ''}
-      ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó">${ic('copy')}</button>` : ''}
-      <button class="cv-hbtn x" title="Remover nó">${ic('x')}</button>
+      ${canRegen ? `<button class="cv-hbtn" data-act="regen" title="Regerar (nova variação)" aria-label="Regerar (nova variação)">${ic('refresh')}</button>` : ''}
+      ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
+      <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
     <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
@@ -826,11 +843,11 @@ function previewBlock(n, { placeholder, ghost } = {}) {
   const running = n.status === 'running';
   return `<div class="cv-preview ${out ? 'has' : ''} ${running ? 'busy' : ''}">
     ${media}
-    ${running ? `<div class="cv-busy"><div class="cv-busy-txt">${ic('loader', 'spin')}<span>${esc(n.stage || 'gerando')}</span><b>${n.progress || 0}%</b></div><div class="cv-bar"><i style="width:${n.progress || 0}%"></i></div></div>` : ''}
+    ${running ? `<div class="cv-busy"><div class="cv-busy-txt">${ic('loader', 'spin')}<span>${esc(n.stage || 'gerando')}</span><b>${n.progress || 0}%</b></div><div class="cv-bar"><i data-st="width:${n.progress || 0}%"></i></div></div>` : ''}
     ${out && !running ? `<div class="cv-pv-tools">
-      ${takes.length > 1 ? `<div class="cv-takes"><button data-act="take" data-d="-1" title="Versão anterior">${ic('step-back')}</button><span>v${idx + 1}/${takes.length}</span><button data-act="take" data-d="1" title="Próxima versão">${ic('step-forward')}</button></div>` : '<span></span>'}
+      ${takes.length > 1 ? `<div class="cv-takes"><button data-act="take" data-d="-1" title="Versão anterior" aria-label="Versão anterior">${ic('step-back')}</button><span>v${idx + 1}/${takes.length}</span><button data-act="take" data-d="1" title="Próxima versão" aria-label="Próxima versão">${ic('step-forward')}</button></div>` : '<span></span>'}
       <div class="cv-pv-btns">
-        <button data-act="regen" title="Regerar: nova variação com o mesmo prompt">${ic('refresh')}</button>
+        <button data-act="regen" title="Regerar: nova variação com o mesmo prompt" aria-label="Regerar: nova variação com o mesmo prompt">${ic('refresh')}</button>
         <a href="${out.url}" target="_blank" rel="noopener" title="Abrir em tamanho real">${ic('external')}</a>
         <a href="${out.url}" download title="Baixar">${ic('download')}</a>
       </div></div>` : ''}
@@ -877,10 +894,17 @@ function field(label, html, extra = '') {
 
 const opt = (v, cur, text = v) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${text}</option>`;
 
+// vídeo de preview toca ao passar o mouse (sem onmouseenter inline: CSP)
+document.addEventListener('mouseover', (e) => { const v = e.target.closest?.('video[data-hover-play]'); if (v) v.play().catch(() => {}); });
+document.addEventListener('mouseout', (e) => {
+  const v = e.target.closest?.('video[data-hover-play]');
+  if (v && !v.contains(e.relatedTarget)) v.pause();
+});
+
 function mediaBody(n) {
   const m = n.media;
   return `<div class="cv-preview has">${m.kind === 'video'
-    ? `<video src="${m.url}" poster="${m.thumb}" muted loop playsinline onmouseenter="this.play()" onmouseleave="this.pause()"></video>`
+    ? `<video src="${m.url}" poster="${m.thumb}" muted loop playsinline data-hover-play></video>`
     : `<img src="${m.url}" alt="">`}</div>
     <div class="cv-meta"><span>${m.kind === 'video' ? `${m.duration || '?'}s · ${m.width || ''}×${m.height || ''}` : 'imagem'}</span><span>${m.kind === 'video' ? 'saída = último frame' : 'saída = esta imagem'}</span></div>`;
 }
@@ -970,7 +994,7 @@ function montageBody(n) {
       : `<div>${esc(s.name)} ${videoOf(s) ? ic('check', 'ok') : '— sem vídeo'}</div>`).join('') : '<div>Ligue planos ou vídeos aqui</div>'}</div>
     <div class="cv-refs" data-role="audio" title="Solte aqui um áudio de Meus arquivos">
       <div class="cv-refs-head"><b>Trilha / locução</b><span>${n.audio ? esc(n.audio.name || 'áudio') : 'opcional: solte um áudio aqui'}</span></div>
-      ${n.audio ? `<audio src="${n.audio.url}" controls style="width:100%"></audio><button class="btn small ghost" data-act="noaudio">Remover áudio</button>`
+      ${n.audio ? `<audio src="${n.audio.url}" controls data-st="width:100%"></audio><button class="btn small ghost" data-act="noaudio">Remover áudio</button>`
         : `<label class="btn small ghost">${ic('music')} Enviar áudio<input type="file" accept="audio/*" hidden data-role="audio-file"></label>`}
     </div>
     <div class="cv-foot"><button class="btn primary" data-act="montage">${ic('film')} ${n.output ? 'Montar de novo' : 'Montar corte'}</button></div>`;
@@ -1021,8 +1045,8 @@ function refsBlock(n, hint) {
   return `<div class="cv-refs" data-role="refs" title="Solte aqui imagens da biblioteca ou do computador">
     <div class="cv-refs-head"><b>Referências</b><span>${esc(hint)}</span></div>
     <div class="cv-refs-row">
-      ${(n.refs || []).map((r, i) => `<div class="cv-ref" style="background-image:url('${r.url}')" title="${esc(r.name || '')}"><span>${i + 1}</span><button data-del="${i}" title="Remover">${ic('x')}</button></div>`).join('')}
-      ${linked.map((u, j) => `<div class="cv-ref linked" style="background-image:url('${u}')" title="Ligada na porta R"><span>${(n.refs || []).length + j + 1}</span></div>`).join('')}
+      ${(n.refs || []).map((r, i) => `<div class="cv-ref" data-st="background-image:url('${r.url}')" title="${esc(r.name || '')}"><span>${i + 1}</span><button data-del="${i}" title="Remover" aria-label="Remover">${ic('x')}</button></div>`).join('')}
+      ${linked.map((u, j) => `<div class="cv-ref linked" data-st="background-image:url('${u}')" title="Ligada na porta R"><span>${(n.refs || []).length + j + 1}</span></div>`).join('')}
       <label class="cv-ref add" title="Enviar imagem de referência">${ic('plus')}<input type="file" accept="image/*" multiple hidden data-role="ref-file"></label>
     </div>
   </div>`;

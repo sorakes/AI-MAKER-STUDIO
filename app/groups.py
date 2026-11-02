@@ -44,6 +44,14 @@ def token_rate() -> float:
         return TOKEN_RATE_DEFAULT
 
 
+async def atoken_rate() -> float:
+    """Versão async de token_rate() para rotas async."""
+    try:
+        return max(0.0001, float(await db.aget_setting("token_rate") or TOKEN_RATE_DEFAULT))
+    except (TypeError, ValueError):
+        return TOKEN_RATE_DEFAULT
+
+
 def to_tokens(usd: float | None) -> float:
     return round((usd or 0) * token_rate(), 2)
 WS_PERM = {"video": "ws_video", "character": "ws_character", "product": "ws_product"}

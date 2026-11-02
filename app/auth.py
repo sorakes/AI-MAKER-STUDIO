@@ -1,4 +1,5 @@
 """Login por sessão (cookie HttpOnly), usuário corrente e bootstrap do primeiro admin."""
+import asyncio
 import json
 import secrets
 import time
@@ -56,16 +57,19 @@ def bootstrap_admin():
 
 
 # Tentativas de login por e-mail/IP (força bruta).
-_attempts: dict[str, list[float]] = {}
+LOGIN_WINDOW_S = 600  # janela de contagem
+LOGIN_MAX = 10        # tentativas por (ip, e-mail) dentro da janela
 
 
 def _throttle(key: str):
+    """Rate limit persistido em SQLite (vale entre workers e reinícios). Expirados são apagados aqui."""
     t = time.time()
-    hits = [x for x in _attempts.get(key, []) if t - x < 600]
-    _attempts[key] = hits
-    if len(hits) >= 10:
-        raise HTTPException(429, "Muitas tentativas. Aguarde alguns minutos.")
-    hits.append(t)
+    with db.tx() as c:
+        c.execute("DELETE FROM login_attempts WHERE ts < ?", (t - LOGIN_WINDOW_S,))
+        n = c.execute("SELECT COUNT(*) n FROM login_attempts WHERE key = ?", (key,)).fetchone()["n"]
+        if n >= LOGIN_MAX:
+            raise HTTPException(429, "Muitas tentativas. Aguarde alguns minutos.")
+        c.execute("INSERT INTO login_attempts(key, ts) VALUES(?, ?)", (key, t))
 
 
 def login(email: str, password: str, ip: str) -> tuple[str, dict]:
@@ -78,7 +82,7 @@ def login(email: str, password: str, ip: str) -> tuple[str, dict]:
         raise HTTPException(401, "E-mail ou senha incorretos")
     if not u["active"]:
         raise HTTPException(403, "Conta desativada. Fale com o administrador.")
-    _attempts.pop(f"{ip}|{email}", None)
+    db.run("DELETE FROM login_attempts WHERE key = ?", (f"{ip}|{email}",))
     return create_session(u["id"]), u
 
 
@@ -106,9 +110,19 @@ def user_from_request(request: Request) -> dict | None:
     return public_user(u) if u else None
 
 
+async def auser_from_request(request: Request) -> dict | None:
+    """Versão async: a consulta de sessão vai pelo aiosqlite; grupos/limites (código sync) rodam em thread."""
+    token = request.cookies.get(COOKIE)
+    if not token:
+        return None
+    u = await db.aone("SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id "
+                      "WHERE s.token_hash = ? AND s.expires_at > ? AND u.active = 1", (token_hash(token), time.time()))
+    return await asyncio.to_thread(public_user, u) if u else None
+
+
 async def current_user(request: Request) -> dict:
     # async: o ContextVar setado aqui vale para o endpoint (sync deps rodam em outra thread).
-    u = user_from_request(request)
+    u = await auser_from_request(request)
     if not u:
         raise HTTPException(401, "Faça login")
     CURRENT.set(u)

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
     <script src="/js/i18n.js"></script>
+  <script src="/js/styles.js"></script>
   <script src="/js/i18n-en.js"></script>
   <script src="/js/i18n-es.js"></script>
   <title>Studio</title>
@@ -18,12 +19,12 @@
 <header class="topbar">
   <div class="brand-logo"><span data-app-logo class="brand-mark"><i data-ic="logo"></i></span> <span data-app-name>Studio</span></div>
   <nav class="tabs" id="studioTabs">
-    <button class="tab active" data-view="canvas"><i data-ic="video"></i> Video Studio</button>
-    <button class="tab" data-view="character"><i data-ic="user"></i> Personagens</button>
-    <button class="tab" data-view="product"><i data-ic="logo"></i> Produtos</button>
-    <button class="tab" data-view="inventory"><i data-ic="folder"></i> Inventário</button>
+    <button class="tab active" data-view="canvas" title="Video Studio" aria-label="Video Studio"><i data-ic="video"></i> Video Studio</button>
+    <button class="tab" data-view="character" title="Personagens" aria-label="Personagens"><i data-ic="user"></i> Personagens</button>
+    <button class="tab" data-view="product" title="Produtos" aria-label="Produtos"><i data-ic="logo"></i> Produtos</button>
+    <button class="tab" data-view="inventory" title="Inventário" aria-label="Inventário"><i data-ic="folder"></i> Inventário</button>
   </nav>
-  <div class="cv-toolbar canvas-only" style="border:0;padding:0;background:none">
+  <div class="cv-toolbar canvas-only" data-st="border:0;padding:0;background:none">
     <button class="btn small primary" id="cvRunAll" title="Gera tudo que falta, na ordem das ligações, e monta o corte"><i data-ic="play"></i> Rodar fluxo</button>
     <button class="btn small ghost" id="cvFit"><i data-ic="fit"></i> Enquadrar</button>
     <button class="btn small ghost" id="cvClear">Limpar</button>
@@ -42,7 +43,7 @@
           <span class="chips"><button class="chip active" data-ikind="">Tudo</button><button class="chip" data-ikind="image">Imagens</button><button class="chip" data-ikind="video">Vídeos</button><button class="chip" data-ikind="audio">Áudio</button></span>
           <select id="invOrigin"><option value="">Gerados e enviados</option><option value="gen">Só gerados</option><option value="up">Só enviados</option></select>
           <input id="invSearch" placeholder="Buscar pelo nome">
-          <button class="btn small ghost" id="invRefresh" title="Atualizar"><i data-ic="refresh"></i></button>
+          <button class="btn small ghost" id="invRefresh" title="Atualizar" aria-label="Atualizar"><i data-ic="refresh"></i></button>
         </div>
       </div>
       <div class="inv-bar">
@@ -84,7 +85,7 @@
         <aside class="cv-library">
           <div id="cvAssetsPanel" class="as-panel"></div>
           <div class="files-panel">
-          <div class="section-label"><span>Meus arquivos</span><label class="btn small ghost cv-upload"><i data-ic="upload"></i> Enviar<input type="file" id="cvFile" accept="image/*,video/*,audio/*" multiple hidden></label></div>
+          <div class="section-label"><span>Meus arquivos</span><label class="btn small ghost cv-upload"><i data-ic="upload"></i> Enviar<input type="file" id="cvFile" class="sr-only" accept="image/*,video/*,audio/*" multiple></label></div>
           <p class="cv-side-note" id="cvStorage">Arraste para o canvas. Também dá para soltar arquivos do computador direto no canvas.</p>
           <div id="cvLibrary" class="cv-lib-grid"></div>
           </div>
@@ -109,7 +110,7 @@
     </div>
   </div>
   <div class="dz-help" id="dzHelp">
-    <div><b class="n" style="background:#a855f7">1</b><span>Com o cartão <b style="color:#a855f7">CÂMERA</b> ativo, desenhe em <b>roxo</b> por onde a câmera vai sobre a imagem: o ponto é o começo, a seta é o fim.</span></div>
+    <div><b class="n" data-st="background:#a855f7">1</b><span>Com o cartão <b data-st="color:#a855f7">CÂMERA</b> ativo, desenhe em <b>roxo</b> por onde a câmera vai sobre a imagem: o ponto é o começo, a seta é o fim.</span></div>
     <div><b class="n">2</b><span>Clique em <b>+ Elemento</b> para ganhar uma cor nova. <b>Circule</b> o objeto e puxe uma <b>linha</b> mostrando para onde ele vai.</span></div>
     <div><b class="n">3</b><span>Em cada cartão, escreva o que acontece. Ex.: <i>AMARELO: a bola vai levemente para a direita</i>.</span></div>
     <div><b class="n">4</b><span><b>Salvar</b>: a IA olha o frame + desenho e escreve a direção no prompt do vídeo.</span></div>
@@ -132,6 +133,7 @@
 
 
 <div id="toast"></div>
+<div id="uploadStatus" class="sr-only" role="status" aria-live="polite"></div>
 <script src="/js/icons.js"></script>
 <script src="/js/common.js"></script>
 <script src="/js/effects.js"></script>

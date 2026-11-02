@@ -70,7 +70,7 @@ function renderInventory() {
   $('#invItems').innerHTML = items.length ? items.map((a) => {
     const files = INV.files.filter((f) => f.asset?.id === a.id);
     return `<button class="inv-item" data-asset="${a.id}" title="Abrir ${esc(a.name)} no canvas">
-      <span class="inv-item-cover" style="${a.cover ? `background-image:url('${a.cover}')` : ''}"></span>
+      <span class="inv-item-cover" data-st="${a.cover ? `background-image:url('${a.cover}')` : ''}"></span>
       <span class="inv-item-meta"><b>${esc(a.name)}</b><small>${a.kind === 'product' ? 'Produto' : 'Personagem'} · ${files.length} imagem(ns) dentro</small></span>
     </button>`;
   }).join('') : '<p class="note">Nenhum personagem ou produto salvo ainda.</p>';
@@ -79,7 +79,7 @@ function renderInventory() {
 
   $('#invGrid').innerHTML = vis.length ? vis.map((f, i) => `
     <div class="inv-card ${INV.sel.has(f.url) ? 'sel' : ''} ${f.kind}" data-i="${i}" draggable="true" title="${esc(f.name)}">
-      <div class="inv-thumb" ${f.thumb ? `style="background-image:url('${f.thumb}')"` : ''}>${f.kind === 'audio' ? ic('music') : ''}
+      <div class="inv-thumb" ${f.thumb ? `data-st="background-image:url('${f.thumb}')"` : ''}>${f.kind === 'audio' ? ic('music') : ''}
         <span class="inv-check">${ic('check')}</span>
         <span class="inv-kind">${f.kind === 'video' ? ic('play') : f.kind === 'audio' ? 'áudio' : ic('image')}</span>
       </div>

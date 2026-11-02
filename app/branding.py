@@ -1,6 +1,7 @@
 """Branding do app: nome, logo, tema de cores e estilo (pixel/arredondado)."""
 import re
 import uuid
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -53,10 +54,33 @@ def save(data: dict) -> dict:
     return get()
 
 
+# SVG é XML com script: só aceita SVG "estático" (sem script, handlers, foreignObject, DOCTYPE ou recursos externos).
+_SVG_BLOCKED = [
+    r"<script", r"<foreignobject", r"<iframe", r"<embed", r"<object", r"<!doctype", r"<!entity", r"javascript:",
+    r"[\s\"'/]on[a-z]+\s*=",                       # onload=, onclick=...
+    r"href\s*=\s*[\"']\s*(?!#)",                  # href externo (ou data:)
+    r"url\(\s*[\"']?\s*(?!#)",                      # url(...) externo em style/fill
+]
+
+
+def check_svg(data: bytes) -> None:
+    text = data.decode("utf-8", "replace").lower()
+    if any(re.search(p, text) for p in _SVG_BLOCKED):
+        raise HTTPException(400, "SVG com script, handlers ou recursos externos não é aceito")
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError as e:
+        raise HTTPException(400, "SVG inválido") from e
+    if not root.tag.endswith("svg"):
+        raise HTTPException(400, "SVG inválido")
+
+
 def save_logo(filename: str, data: bytes) -> dict:
     ext = Path(filename).suffix.lower()
     if ext not in LOGO_EXT or len(data) > 4 * 2**20:
         raise HTTPException(400, "Logo precisa ser PNG, JPG, WEBP, SVG ou GIF até 4 MB")
+    if ext == ".svg":
+        check_svg(data)
     cur = {**DEFAULT, **(db.get_setting("branding") or {})}
     if cur.get("logo"):
         (BRAND_DIR / cur["logo"]).unlink(missing_ok=True)

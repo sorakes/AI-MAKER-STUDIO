@@ -82,6 +82,11 @@ def get(mid: int) -> dict | None:
     return _row(r) if r else None
 
 
+async def aget(mid: int) -> dict | None:
+    r = await db.aone("SELECT * FROM models WHERE id = ?", (mid,))
+    return _row(r) if r else None
+
+
 def public(m: dict) -> dict:
     """O que o estúdio precisa saber (sem campos internos)."""
     return {"id": m["id"], "kind": m["kind"], "label": m["label"], "provider": m["provider"],

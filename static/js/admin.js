@@ -56,18 +56,24 @@ async function loadOverview() {
   ].map(([t, v, s, c]) => `<div class="kpi ${c || ''}"><small>${t}</small><b>${v}</b><span>${s}</span></div>`).join('');
   const days = Array.from({ length: new Date().getDate() }, (_, i) => o.days.find((d) => d.d === i) || { d: i, cost: 0, n: 0 });
   const max = Math.max(0.0001, ...days.map((d) => d.cost));
-  $('#chartDays').innerHTML = spend ? days.map((d) => `<div style="height:${(d.cost / max) * 100}%" data-tip="dia ${d.d + 1}: ${fmtUsd(d.cost)} · ${d.n} gerações"></div>`).join('')
+  $('#chartDays').innerHTML = spend ? days.map((d) => `<div data-st="height:${(d.cost / max) * 100}%" data-tip="dia ${d.d + 1}: ${fmtUsd(d.cost)} · ${d.n} gerações"></div>`).join('')
     : '<div class="empty">Sem gastos neste mês ainda.</div>';
   $('#topUsers').innerHTML = '<tr><th>Usuário</th><th class="num">Gerações</th><th class="num">Gasto</th></tr>'
     + o.top_users.map((u) => `<tr><td>${esc(u.name || u.email)}<br><small class="mono">${esc(u.email)}</small></td><td class="num">${u.n}</td><td class="num">${fmtUsd(u.cost)}</td></tr>`).join('');
   $('#provSummary').innerHTML = o.providers.map((p) => `<span class="tag ${p.configured && p.enabled ? 'ok' : 'err'}">${esc(p.label)}: ${p.configured ? (p.enabled ? `key ${esc(p.hint)}` : 'desativado') : 'sem key'}</span>`).join('')
-    + ' <a class="btn small ghost" href="#models" onclick="show(\'models\')">Configurar</a>';
+    + ' <a class="btn small ghost" href="#models" data-show="models">Configurar</a>';
 }
+
+// clique em links gerados com data-show (CSP não permite onclick inline)
+document.addEventListener('click', (e) => {
+  const a = e.target.closest?.('[data-show]');
+  if (a) show(a.dataset.show);
+});
 
 // ---------------- Usuários ----------------
 
 const meter = (used, max, fmt = (v) => v) => (max == null ? `<small>${fmt(used)} · ∞</small>`
-  : `<small>${fmt(used)} / ${fmt(max)}</small><div class="meter"><i class="${used / Math.max(1e-9, max) > 0.85 ? 'hot' : ''}" style="width:${max ? Math.min(100, (used / max) * 100) : 100}%"></i></div>`);
+  : `<small>${fmt(used)} / ${fmt(max)}</small><div class="meter"><i class="${used / Math.max(1e-9, max) > 0.85 ? 'hot' : ''}" data-st="width:${max ? Math.min(100, (used / max) * 100) : 100}%"></i></div>`);
 
 async function loadUsers() {
   A.users = await api('/api/admin/users');
@@ -85,9 +91,9 @@ async function loadUsers() {
         <td><small>${fmtDate(u.last_login)}</small></td>
         <td><div class="row-actions">
           <button class="btn small ghost" data-edit="${u.id}">Editar</button>
-          <button class="btn small ghost" data-files="${u.id}" title="Arquivos">${ic('folder')}</button>
-          <button class="btn small ghost" data-logs="${u.id}" title="Logs">${ic('list')}</button>
-          ${u.id !== state.me.id ? `<button class="btn small ghost" data-del="${u.id}" title="Excluir conta e arquivos">${ic('trash')}</button>` : ''}
+          <button class="btn small ghost" data-files="${u.id}" title="Arquivos" aria-label="Arquivos">${ic('folder')}</button>
+          <button class="btn small ghost" data-logs="${u.id}" title="Logs" aria-label="Logs">${ic('list')}</button>
+          ${u.id !== state.me.id ? `<button class="btn small ghost" data-del="${u.id}" title="Excluir conta e arquivos" aria-label="Excluir conta e arquivos">${ic('trash')}</button>` : ''}
         </div></td></tr>`;
     }).join('');
   document.querySelectorAll('[data-edit]').forEach((b) => { b.onclick = () => userDialog(A.users.find((u) => u.id === +b.dataset.edit)); });
@@ -152,7 +158,7 @@ async function userDialog(u) {
       <label>Status<select name="active"><option value="1">Ativa</option><option value="0" ${u && !u.active ? 'selected' : ''}>Desativada</option></select></label>
     </div>
     <div class="section-label"><span>Grupos</span><span class="hint">permissões e limites vêm dos grupos</span></div>
-    ${G.data.groups.length ? `<div class="checks">${G.data.groups.map((g) => `<label><input type="checkbox" name="ugroup" value="${g.id}" ${manualIds.has(g.id) ? 'checked' : ''}> <span class="gdot" style="--g:${esc(g.color)}"></span> ${esc(g.name)}</label>`).join('')}</div>` : '<p class="note">Nenhum grupo criado (aba Grupos).</p>'}
+    ${G.data.groups.length ? `<div class="checks">${G.data.groups.map((g) => `<label><input type="checkbox" name="ugroup" value="${g.id}" ${manualIds.has(g.id) ? 'checked' : ''}> <span class="gdot" data-st="--g:${esc(g.color)}"></span> ${esc(g.name)}</label>`).join('')}</div>` : '<p class="note">Nenhum grupo criado (aba Grupos).</p>'}
     ${msGroups.length ? `<p class="note">${ic('cloud')} Pela Microsoft: ${msGroups.map(groupTag).join(' ')} (atualiza a cada login)</p>` : ''}
     <div class="section-label"><span>Limites próprios da conta</span><span class="hint">vazio = do grupo/padrão · ∞ = sem limite</span></div>
     <div class="limits-grid">${limitsInputs(custom, settings.default_limits)}</div>
@@ -196,13 +202,13 @@ async function loadModels() {
       <div class="kinds">Usado para: ${p.kinds.map((k) => t(KIND_LABEL[k])).join(', ')} · <a href="${p.site}" target="_blank" rel="noopener">obter key ${ic('external')}</a></div>
       <div class="keys">${p.keys.length ? p.keys.map((k) => `
         <div class="key-row ${k.enabled ? '' : 'off'}" data-k="${k.id}">
-          <button class="star ${k.is_default ? 'on' : ''}" data-act="kdefault" title="${k.is_default ? 'Key padrão do provedor' : 'Tornar padrão'}">${ic('star')}</button>
+          <button class="star ${k.is_default ? 'on' : ''}" data-act="kdefault" title="${k.is_default ? 'Key padrão do provedor' : 'Tornar padrão'}" aria-label="${k.is_default ? 'Key padrão do provedor' : 'Tornar padrão'}">${ic('star')}</button>
           <div class="key-main"><b>${esc(k.name)}</b><small class="mono">${esc(k.hint || '')}${k.models ? ` · usada por ${k.models} modelo(s)` : ''}${k.readable ? '' : ' · <span class="err">ilegível (SECRET_KEY mudou)</span>'}</small></div>
           <div class="row-actions">
             <button class="btn small ghost" data-act="ktest">Testar</button>
-            <button class="btn small ghost" data-act="krename" title="Renomear">${ic('pencil')}</button>
+            <button class="btn small ghost" data-act="krename" title="Renomear" aria-label="Renomear">${ic('pencil')}</button>
             <button class="btn small ghost" data-act="ktoggle">${k.enabled ? 'Desativar' : 'Ativar'}</button>
-            <button class="btn small ghost" data-act="kdel" title="Remover">${ic('trash')}</button>
+            <button class="btn small ghost" data-act="kdel" title="Remover" aria-label="Remover">${ic('trash')}</button>
           </div>
           <div class="key-result" data-role="kres"></div>
         </div>`).join('') : `<p class="note">${p.from_env ? 'Usando a key da variável de ambiente.' : 'Nenhuma key cadastrada.'}</p>`}</div>
@@ -363,7 +369,7 @@ function renderModels() {
     const list = A.models.filter((m) => m.kind === kind);
     return `<div class="model-group"><h5>${KIND_LABEL[kind]}</h5>${list.length ? list.map((m) => `
       <div class="model ${m.enabled ? '' : 'off'}" data-m="${m.id}">
-        <button class="star ${m.is_default ? 'on' : ''}" data-act="default" title="Padrão do Automático">${ic('star')}</button>
+        <button class="star ${m.is_default ? 'on' : ''}" data-act="default" title="Padrão do Automático" aria-label="Padrão do Automático">${ic('star')}</button>
         <div class="name"><b>${esc(m.label)}</b> <span class="tag">${esc(m.provider)}</span>${m.available ? ` <span class="tag key">${ic('key')} ${esc(m.key_name || 'padrão')}${m.key_id ? '' : ' (padrão)'}</span>` : ' <span class="tag err">sem key</span>'}
           <small>${esc(m.model_id)}</small><div class="caps">${capsTags(m)}</div></div>
         ${keySelect(m)}
@@ -371,8 +377,8 @@ function renderModels() {
         <div class="row-actions">
           <label class="inline" title="Aparece no estúdio"><input type="checkbox" data-act="enabled" ${m.enabled ? 'checked' : ''}> ativo</label>
           <button class="btn small ghost" data-act="edit">Editar</button>
-          <button class="btn small ghost" data-act="refresh" title="Reler capacidades e preço do provedor">${ic('refresh')}</button>
-          <button class="btn small ghost" data-act="delete" title="Remover">${ic('trash')}</button>
+          <button class="btn small ghost" data-act="refresh" title="Reler capacidades e preço do provedor" aria-label="Reler capacidades e preço do provedor">${ic('refresh')}</button>
+          <button class="btn small ghost" data-act="delete" title="Remover" aria-label="Remover">${ic('trash')}</button>
         </div>
       </div>`).join('') : '<p class="note">Nenhum modelo.</p>'}</div>`;
   }).join('');
@@ -544,7 +550,7 @@ function renderFiles() {
     const thumb = f.kind === 'image' ? f.url : f.kind === 'video' ? f.url.replace(/\.[^.]+$/, '_first.png') : null;
     return `<div class="fcard ${A.sel.has(f.url) ? 'sel' : ''}">
       <input type="checkbox" data-sel="${esc(f.url)}" ${A.sel.has(f.url) ? 'checked' : ''}>
-      <div class="thumb" data-open="${esc(f.url)}" ${thumb ? `style="background-image:url('${thumb}')"` : ''}>${f.kind === 'audio' ? ic('music') : f.kind === 'video' ? ic('play') : ''}</div>
+      <div class="thumb" data-open="${esc(f.url)}" ${thumb ? `data-st="background-image:url('${thumb}')"` : ''}>${f.kind === 'audio' ? ic('music') : f.kind === 'video' ? ic('play') : ''}</div>
       <div class="meta"><b title="${esc(f.name)}">${esc(f.name)}</b>${esc(f.email)} · ${f.folder}<br>${fmtBytes(f.size)} · ${fmtDate(f.mtime)}</div>
     </div>`;
   }).join('') || '<p class="note">Nenhum arquivo.</p>';
@@ -564,7 +570,7 @@ async function deleteFiles(urls) {
 async function loadSettings() {
   const s = await api('/api/admin/settings');
   if (!A.models.length) A.models = await api('/api/admin/models');
-  $('#setLimits').innerHTML = limitsInputs(s.default_limits) + `<div style="grid-column: span 2">${modelChecks(s.default_limits.models)}</div>`;
+  $('#setLimits').innerHTML = limitsInputs(s.default_limits) + `<div data-st="grid-column: span 2">${modelChecks(s.default_limits.models)}</div>`;
   $('#setTokenRate').value = s.token_rate;
   $('#setLang').value = s.default_lang || 'en';
   const hint = () => { const r = +$('#setTokenRate').value || 0; $('#setTokenHint').textContent = r ? `1 token = US$ ${(1 / r).toFixed(4)} · um vídeo de US$ 0,50 = ${Math.round(0.5 * r)} tokens` : ''; };
@@ -595,7 +601,7 @@ async function loadBranding() {
   $('#brTagline').value = BR.draft.tagline || '';
   $('#brName').oninput = (e) => { BR.draft.app_name = e.target.value; previewBranding(); };
   $('#brTagline').oninput = (e) => { BR.draft.tagline = e.target.value; previewBranding(); };
-  $('#brThemes').innerHTML = Object.entries(BR.data.themes).map(([k, t]) => `<button class="br-theme" data-theme="${k}" style="--a:${t.accent};--b:${t.accent2};--bg:${t.bg}">
+  $('#brThemes').innerHTML = Object.entries(BR.data.themes).map(([k, t]) => `<button class="br-theme" data-theme="${k}" data-st="--a:${t.accent};--b:${t.accent2};--bg:${t.bg}">
     <span class="sw"><i></i><i></i><i></i></span><b>${esc(t.label)}</b></button>`).join('');
   document.querySelectorAll('[data-theme]').forEach((b) => { b.onclick = () => { BR.draft.theme = b.dataset.theme; BR.draft.accent = BR.draft.accent2 = BR.draft.bg = null; previewBranding(); }; });
   [['brAccent', 'accent'], ['brAccent2', 'accent2'], ['brBg', 'bg']].forEach(([id, k]) => {
@@ -683,7 +689,7 @@ async function ensureGroups() {
 }
 
 const permLabel = (k) => G.data?.permissions.find((p) => p.key === k)?.label || k;
-const groupTag = (g) => `<span class="tag gtag" style="--g:${esc(g.color)}" title="${g.source === 'microsoft' ? 'Atribuído pela Microsoft' : 'Atribuído no painel'}">${g.source === 'microsoft' ? ic('cloud') : ''}${esc(g.name)}</span>`;
+const groupTag = (g) => `<span class="tag gtag" data-st="--g:${esc(g.color)}" title="${g.source === 'microsoft' ? 'Atribuído pela Microsoft' : 'Atribuído no painel'}">${g.source === 'microsoft' ? ic('cloud') : ''}${esc(g.name)}</span>`;
 
 function limitSummary(lim, budgetTok) {
   const parts = lim.budget_usd != null ? [`Verba US$ ${lim.budget_usd}${lim.budget_split ? ' dividida' : '/pessoa'} = ${Number(budgetTok || 0).toLocaleString(LOC)} tokens/pessoa`] : [];
@@ -700,10 +706,10 @@ async function loadGroups() {
   $('#groupsList').innerHTML = G.data.groups.length ? G.data.groups.map((g) => {
     const ms = g.members.filter((m) => m.source === 'microsoft').length;
     const perms = Object.entries(g.permissions).filter(([k, v]) => v && !k.startsWith('node_')).map(([k]) => `<span class="tag ${k === 'admin' ? 'admin' : 'ok'}">${esc(permLabel(k))}</span>`).join('') || '<span class="tag off">nenhuma permissão</span>';
-    return `<div class="gcard" style="--g:${esc(g.color)}">
+    return `<div class="gcard" data-st="--g:${esc(g.color)}">
       <div class="gcard-head"><span class="gdot"></span><b>${esc(g.name)}</b>
         <small>${g.members.length} membro(s)${ms ? ` · ${ms} via Microsoft` : ''}</small>
-        <span class="row-actions"><button class="btn small ghost" data-gedit="${g.id}">Editar</button><button class="btn small ghost" data-gdel="${g.id}" title="Excluir grupo">${ic('trash')}</button></span></div>
+        <span class="row-actions"><button class="btn small ghost" data-gedit="${g.id}">Editar</button><button class="btn small ghost" data-gdel="${g.id}" title="Excluir grupo" aria-label="Excluir grupo">${ic('trash')}</button></span></div>
       ${g.description ? `<p class="note">${esc(g.description)}</p>` : ''}
       <div class="gperms">${perms}</div>
       ${(() => { const off = G.data.nodes.filter((n) => g.permissions[n.key] === false); return off.length ? `<div class="gmeta">Nodes bloqueados: ${off.map((n) => `<span class="tag off">${esc(n.label)}</span>`).join('')}</div>` : '<div class="gmeta">todos os nodes liberados</div>'; })()}
@@ -735,7 +741,7 @@ function groupModelsBlock(lim) {
 
 function rulesBlock(g) {
   if (!g) return '<p class="note">Salve o grupo para adicionar regras de atribuição automática.</p>';
-  return `<div class="rules">${g.rules.map((r) => `<div class="rule"><span class="tag">${esc(G.data.rule_types[r.type] || r.type)}</span><code>${esc(r.value)}</code><button type="button" class="btn small ghost" data-rdel="${r.id}" title="Remover regra">${ic('x')}</button></div>`).join('') || '<p class="note">Nenhuma regra.</p>'}</div>
+  return `<div class="rules">${g.rules.map((r) => `<div class="rule"><span class="tag">${esc(G.data.rule_types[r.type] || r.type)}</span><code>${esc(r.value)}</code><button type="button" class="btn small ghost" data-rdel="${r.id}" title="Remover regra" aria-label="Remover regra">${ic('x')}</button></div>`).join('') || '<p class="note">Nenhuma regra.</p>'}</div>
     <div class="rule-add"><select id="gRuleType">${Object.entries(G.data.rule_types).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select>
       <input id="gRuleValue" placeholder="ex.: empresa.com"><button type="button" class="btn small" id="gRuleAdd">${ic('plus')} Adicionar</button></div>`;
 }

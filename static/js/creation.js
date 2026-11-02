@@ -73,7 +73,7 @@ function castBody(n) {
     return list.length ? `<optgroup label="${label}">${list.map((x) => opt(x.id, n.assetId, esc(x.name))).join('')}</optgroup>` : '';
   };
   return `
-    <div class="cv-cast-strip">${imgs.length ? imgs.slice(0, 4).map((u) => `<div style="background-image:url('${u}')"></div>`).join('')
+    <div class="cv-cast-strip">${imgs.length ? imgs.slice(0, 4).map((u) => `<div data-st="background-image:url('${u}')"></div>`).join('')
       : `<div class="empty">${ic('users')}<span>${a ? 'Salve o item na aba dele (nó Salvar)' : 'Escolha um personagem/produto salvo ou envie fotos'}</span></div>`}</div>
     ${field('Do estúdio', `<select data-k="assetId"><option value="">— manual (preencher aqui) —</option>${group('character', 'Personagens')}${group('product', 'Produtos')}</select>`)}
     ${a ? `<div class="cv-asset-info"><b>${esc(a.name)}</b><p>${esc(a.description || 'sem descrição')}</p>
@@ -124,7 +124,7 @@ function briefBody(n) {
         ${p.shots.map((s, i) => `<div class="cv-plan-shot">
           <span class="n">${i + 1}</span>
           <div><b>${esc(s.name)}</b><small>${s.duration}s · ${esc(camName(s.camera))}</small><p>${esc(s.intent)}</p>${s.why ? `<p class="why">${esc(s.why)}</p>` : ''}</div>
-          <button class="cv-hbtn" data-del="${i}" title="Tirar este plano">${ic('x')}</button>
+          <button class="cv-hbtn" data-del="${i}" title="Tirar este plano" aria-label="Tirar este plano">${ic('x')}</button>
         </div>`).join('')}
         ${p.notes ? `<p class="cv-side-note">${esc(p.notes)}</p>` : ''}
         ${p.compliance_note ? `<p class="cv-warn">${ic('alert')} ${esc(p.compliance_note)}</p>` : ''}

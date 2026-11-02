@@ -71,15 +71,15 @@ def microsoft_start():
 async def microsoft_callback(request: Request, code: str = "", state: str = "", error: str = "", error_description: str = ""):
     ip = request.client.host if request.client else "?"
     if error:
-        usage.log("login", status="error", detail={"provider": "microsoft", "ip": ip, "error": error_description or error})
+        await usage.alog("login", status="error", detail={"provider": "microsoft", "ip": ip, "error": error_description or error})
         return _login_error("Login cancelado" if error == "access_denied" else f"Microsoft: {error_description or error}")
     try:
         u = await asyncio.to_thread(microsoft.finish, code, state, request.cookies.get(microsoft.STATE_COOKIE))
     except microsoft.LoginDenied as e:
-        usage.log("login", status="error", detail={"provider": "microsoft", "ip": ip, "error": str(e)})
+        await usage.alog("login", status="error", detail={"provider": "microsoft", "ip": ip, "error": str(e)})
         return _login_error(str(e))
-    token = auth.create_session(u["id"])
-    usage.log("login", user_id=u["id"], detail={"ip": ip, "provider": "microsoft", **u.get("_ms", {})})
+    token = await asyncio.to_thread(auth.create_session, u["id"])
+    await usage.alog("login", user_id=u["id"], detail={"ip": ip, "provider": "microsoft", **u.get("_ms", {})})
     r = RedirectResponse("/", status_code=302)
     r.delete_cookie(microsoft.STATE_COOKIE, path="/api/auth/microsoft")
     r.set_cookie(auth.COOKIE, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", secure=COOKIE_SECURE, path="/")

@@ -50,7 +50,7 @@ function directionCard(n) {
       <small>${has ? `${elems.length ? `${elems.length} elemento${elems.length > 1 ? 's' : ''} · ` : ''}${d.result ? 'a IA já entendeu' : 'ainda não interpretado'}` : 'roxo = câmera · cores = elementos'}</small>
       ${stale ? `<small class="cv-warn">${ic('alert')} desenhado em outro frame: revise</small>` : ''}
       ${has && d.diagram_url && !videoTakesRefs(n) ? `<small class="dz-send off" title="O modelo de vídeo escolhido não recebe imagens. A câmera vai só pelo texto.">${ic('x')} desenho não vai: modelo não aceita imagem</small>` : has && d.diagram_url ? `<small class="dz-send ${n.sendDiagram === false ? 'off' : 'on'}" data-act="senddiagram" title="Clique para ligar/desligar">${ic(n.sendDiagram === false ? 'x' : 'check')} desenho ${n.sendDiagram === false ? 'NÃO vai' : 'vai'} para o modelo de vídeo</small>` : ''}
-      ${has ? `<span class="dz-dots">${d.layers.filter((l) => l.shapes.length || l.prompt.trim()).map((l) => `<i style="background:${DZ_COLORS[l.color].hex}"></i>`).join('')}</span>` : ''}
+      ${has ? `<span class="dz-dots">${d.layers.filter((l) => l.shapes.length || l.prompt.trim()).map((l) => `<i data-st="background:${DZ_COLORS[l.color].hex}"></i>`).join('')}</span>` : ''}
     </div>
     <span class="cv-camgo">${ic('route')} ${has ? 'Editar' : 'Desenhar'}</span>
   </div>`;
@@ -64,7 +64,7 @@ function bindDirectionCard(el, n) {
     <p>A câmera e os movimentos são desenhados <b>em cima do 1º frame</b> do vídeo. Sem frame, não há onde desenhar.</p>
     <ol>
       <li>Ligue uma <b>imagem</b> ou <b>vídeo</b> na entrada deste nó (bolinha da esquerda). Pode ser um upload ou a saída de um <b>Gerar imagem</b>.</li>
-      <li>Clique aqui de novo: em <b style="color:${DZ_COLORS.camera.hex}">roxo</b> você desenha a rota da câmera; com outras cores, circula objetos e mostra para onde eles vão.</li>
+      <li>Clique aqui de novo: em <b data-st="color:${DZ_COLORS.camera.hex}">roxo</b> você desenha a rota da câmera; com outras cores, circula objetos e mostra para onde eles vão.</li>
       <li>Escreva em cada cartão o que deve acontecer. A IA olha o frame e o desenho e move a câmera do vídeo a partir dele.</li>
     </ol>
     <p class="muted">Sem frame, o vídeo ainda pode ser gerado só pelo texto: a IA escolhe a câmera.</p>`));
@@ -331,11 +331,11 @@ function renderDzCards() {
     const cam = l.color === 'camera';
     const loops = l.shapes.filter((s) => s.type === 'loop').length, paths = l.shapes.length - loops;
     const shapesTxt = [loops && `${loops} círculo${loops > 1 ? 's' : ''}`, paths && `${paths} linha${paths > 1 ? 's' : ''}`].filter(Boolean).join(' · ') || 'nada desenhado';
-    return `<div class="dz-card ${dz.active === l.color ? 'active' : ''}" data-color="${l.color}" style="--c:${c.hex}">
+    return `<div class="dz-card ${dz.active === l.color ? 'active' : ''}" data-color="${l.color}" data-st="--c:${c.hex}">
       <div class="dz-card-head">
         <span class="dz-swatch"></span><b>${c.label}</b><small>${cam ? 'rota da câmera' : 'elemento'} · ${shapesTxt}</small>
-        ${l.shapes.length ? `<button class="cv-hbtn" data-clear="${l.color}" title="Apagar traços desta cor">${ic('undo')}</button>` : ''}
-        ${cam ? '' : `<button class="cv-hbtn" data-remove="${l.color}" title="Remover elemento">${ic('trash')}</button>`}
+        ${l.shapes.length ? `<button class="cv-hbtn" data-clear="${l.color}" title="Apagar traços desta cor" aria-label="Apagar traços desta cor">${ic('undo')}</button>` : ''}
+        ${cam ? '' : `<button class="cv-hbtn" data-remove="${l.color}" title="Remover elemento" aria-label="Remover elemento">${ic('trash')}</button>`}
       </div>
       <textarea rows="${cam ? 3 : 2}" data-prompt="${l.color}" placeholder="${esc(cam ? DZ_PLACEHOLDER.camera : DZ_PLACEHOLDER.element)}">${esc(l.prompt)}</textarea>
       ${cam && !l.shapes.length ? '<small class="dz-tip">Desenhe em roxo por onde a câmera vai: o ponto é o começo e a seta, o fim.</small>' : ''}
@@ -407,8 +407,8 @@ function renderDzResult() {
     return;
   }
   box.innerHTML = `
-    <div class="dz-res-row" style="--c:${DZ_COLORS.camera.hex}"><span class="dz-swatch"></span><div><b>Câmera</b><p>${esc(r.camera_pt || r.camera_en || '—')}</p></div></div>
-    ${(r.elements || []).map((e) => `<div class="dz-res-row" style="--c:${DZ_COLORS[e.color]?.hex || '#fff'}"><span class="dz-swatch"></span><div><b>${esc(DZ_COLORS[e.color]?.label || e.color)}${e.target_en ? ` · <span>${esc(e.target_en)}</span>` : ''}</b><p>${esc(e.action_pt || e.action_en || '—')}</p></div></div>`).join('')}
+    <div class="dz-res-row" data-st="--c:${DZ_COLORS.camera.hex}"><span class="dz-swatch"></span><div><b>Câmera</b><p>${esc(r.camera_pt || r.camera_en || '—')}</p></div></div>
+    ${(r.elements || []).map((e) => `<div class="dz-res-row" data-st="--c:${DZ_COLORS[e.color]?.hex || '#fff'}"><span class="dz-swatch"></span><div><b>${esc(DZ_COLORS[e.color]?.label || e.color)}${e.target_en ? ` · <span>${esc(e.target_en)}</span>` : ''}</b><p>${esc(e.action_pt || e.action_en || '—')}</p></div></div>`).join('')}
     ${(r.warnings_pt || []).map((w) => `<div class="cv-warn">${ic('alert')} ${esc(w)}</div>`).join('')}
     <small class="dz-src">via ${esc(r.source || '')}</small>`;
 }
