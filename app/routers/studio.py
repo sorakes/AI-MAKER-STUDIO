@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, camera, db, groups, sprites, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, camera, db, groups, lipsync, providers, sprites, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -293,6 +293,32 @@ async def inpaint_image(req: outpaint.InpaintRequest, user: dict = Depends(curre
         composite={"original_url": req.source_url, "keep_mask_url": storage.to_url(keep), "size": list(size)}))
 
 
+@router.post("/video/lipsync")
+async def lipsync_video(req: lipsync.LipSyncRequest, user: dict = Depends(current_user)):
+    """Personagem falando: imagem + áudio (duração do áudio define o vídeo). Sem lip sync real, animação simples."""
+    await _image_source(req.image_url, user)
+    if req.audio_url:
+        apath = storage.resolve(req.audio_url, user)
+        try:
+            seconds = (await asyncio.to_thread(lipsync.audio_info, apath))["duration"]
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+    else:
+        if not req.script.strip():
+            raise HTTPException(400, "Envie um áudio ou escreva o texto da fala")
+        try:
+            await asyncio.to_thread(lipsync.synthesize, req.script, req.voice)
+        except providers.ProviderError as e:
+            raise HTTPException(400, str(e)) from e
+        raise HTTPException(400, "Sem voz (TTS) configurada: envie um áudio")
+    prompt = (f"Animate the portrait so the person speaks the audio with natural lip movement and small head motion. "
+              f"Keep the face, clothes and background identical. {req.script.strip()}").strip()
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="lipsync", model=req.model, prompt=prompt, keyframe_prompt=prompt,
+        aspect=req.aspect, duration=seconds, ref_image_urls=[req.image_url],
+        local_op={"kind": "lipsync", "audio_url": req.audio_url, "aspect": req.aspect, "seconds": seconds}))
+
+
 @router.post("/direction/interpret")
 async def direction_interpret(req: direction.DirectionRequest, user: dict = Depends(need("ai_assist"))):
     """Frame com o desenho (roxo = câmera, cores = elementos) + notas -> plano de movimento."""
@@ -369,6 +395,14 @@ async def upload(file: UploadFile, user: dict = Depends(need("upload"))):
         m = await asyncio.to_thread(media.save_upload, user["id"], file.filename or "arquivo", data)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(400, f"Falha ao processar mídia: {e}") from e
+    if m["kind"] == "audio":  # áudio: trilha real e duração dentro do limite (ffprobe); senão, descarta
+        apath = storage.resolve(m["url"], user)
+        try:
+            info = await asyncio.to_thread(lipsync.audio_info, apath)
+        except ValueError as e:
+            apath.unlink(missing_ok=True)
+            raise HTTPException(400, str(e)) from e
+        m = {**m, "duration": info["duration"]}
     await usage.alog("upload", detail={"file": m["name"], "bytes": len(data)})
     return m
 
