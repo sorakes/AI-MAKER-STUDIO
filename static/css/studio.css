@@ -1034,3 +1034,9 @@ html.i18n-wait body { visibility: hidden; }
 .cv-slider { display: grid; gap: 4px; margin: 6px 0; font-size: .78rem; }
 .cv-slider span { display: flex; justify-content: space-between; color: var(--muted); }
 .cv-slider input[type=range] { width: 100%; accent-color: var(--accent); }
+
+/* editar região: máscara sobre a imagem (tinta magenta semitransparente) e tamanho do pincel */
+#maskCanvas { opacity: .55; }
+.mask-size { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--muted); }
+.mask-size input[type=range] { width: 110px; accent-color: var(--accent); }
+
