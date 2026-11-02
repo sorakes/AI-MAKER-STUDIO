@@ -17,7 +17,7 @@ import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from . import db, media, promptgen, providers, registry, relight, storage, upscale, usage
+from . import db, media, outpaint, promptgen, providers, registry, relight, storage, upscale, usage
 from .auth import CURRENT, public_user
 
 JOBS: dict[str, dict] = {}
@@ -45,7 +45,8 @@ class RenderRequest(BaseModel):
     compose: bool = False              # 1º frame conectado + elenco: gera antes um 1º frame com o elenco na cena
     direction_image_url: str | None = None  # desenho da câmera/elementos sobre o 1º frame (referência do vídeo)
     upscale_factor: int = 0  # gen=upscale: fator final (2 ou 4); a saída da IA é levada a esse tamanho
-    local_op: dict = Field(default_factory=dict)  # gen=relight/style: operação do ajuste local (Pillow)
+    local_op: dict = Field(default_factory=dict)  # gen=relight/style/outpaint/inpaint: operação do ajuste local (Pillow)
+    composite: dict = Field(default_factory=dict)  # outpaint/inpaint: recompõe o original sobre o que a máscara protege
 
 
 def _step(kind: str, m: dict, label: str) -> dict:
@@ -58,6 +59,10 @@ def plan(user: dict, r: RenderRequest) -> list[dict]:
     if r.gen == "upscale":  # IA com referências se houver modelo; senão upscale simples local
         m = upscale.pick(user, r.model)
         return [_step("image", m or upscale.LOCAL, "Upscale criativo" if m else "Upscale simples")]
+    if r.gen in ("outpaint", "inpaint"):  # IA com referências se houver modelo; senão preenchimento simples
+        m = outpaint.pick(user, r.model)
+        label = ("Expandir" if r.gen == "outpaint" else "Editar região") + (" com IA" if m else " simples")
+        return [_step("image", m or relight.local_model(label), label)]
     if r.gen in ("relight", "style"):  # IA com referências se houver modelo; senão ajuste local (Pillow)
         m = relight.pick(user, r.model)
         label = ("Relight" if r.gen == "relight" else "Estilo") + (" com IA" if m else " simples")
@@ -418,6 +423,9 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}.png"
                     if spec.gen == "upscale":
                         await asyncio.to_thread(upscale.resize_file, src, spec.upscale_factor, dest)
+                    elif spec.gen in ("outpaint", "inpaint"):
+                        paths = {k[:-4]: str(storage.resolve(v, user)) for k, v in spec.local_op.items() if k.endswith("_url")}
+                        await asyncio.to_thread(outpaint.apply_local, spec.local_op, paths, dest)
                     else:
                         ref = storage.resolve(spec.ref_image_urls[1], user) if spec.gen == "style" else None
                         await asyncio.to_thread(relight.apply_local, spec.local_op, src, dest, ref)
@@ -432,6 +440,12 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     if spec.upscale_factor:  # IA devolve tamanho próprio: leva ao fator pedido
                         job["detail"] = "ajustando ao tamanho final"
                         await asyncio.to_thread(upscale.resize_file, storage.resolve(st["output"]), spec.upscale_factor)
+                    if spec.composite:  # a área protegida volta a ser o original, byte a byte na composição
+                        job["detail"] = "recompondo a área protegida"
+                        c = spec.composite
+                        await asyncio.to_thread(outpaint.finish_ai, storage.resolve(st["output"]),
+                                                storage.resolve(c["original_url"], user), storage.resolve(c["keep_mask_url"], user),
+                                                tuple(c["size"]), storage.resolve(st["output"]))
             except Exception as e:
                 await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], status="error",
                           detail={"job": job["id"], "error": str(e)[:400]})
