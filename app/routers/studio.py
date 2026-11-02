@@ -464,36 +464,63 @@ async def director_plan(req: director.PlanRequest, user: dict = Depends(need("ai
     return await asyncio.to_thread(director.plan, req)
 
 
-@router.post("/video/edit/quote")
-async def video_edit_quote(req: videoedit.VideoEditRequest, user: dict = Depends(current_user)):
-    """Estimativa antes de editar: quadros e custo em US$ (o front pede confirmação acima de US$ 0,25)."""
+async def _video_edit_plan(req: videoedit.VideoEditRequest, user: dict) -> dict:
+    """Resolve fonte, trecho (vídeo inteiro ou início/fim) e modelo. 400 em português se algo não servir."""
     src = await _video_source(req.source_url, user)
-    end = min(req.end, src["duration"])
+    for u in req.ref_urls:  # fotos de referência: do próprio usuário e imagens (403/404 se não)
+        storage.resolve(u, user)
+    start, end = (0.0, src["duration"]) if req.whole else (req.start, min(req.end, src["duration"]))
     try:
-        videoedit.validate_segment(req.start, end, src["duration"])
+        model = await asyncio.to_thread(videoedit.choose_model, user, req.model)  # lê o banco: fora do event loop
+        videoedit.validate_segment(start, end, src["duration"], native=model is not None)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    m = registry.pick(user, "image", "auto", {"t2i": True})
-    if not m:
-        raise HTTPException(400, "Nenhum modelo de imagem disponível para editar os quadros")
-    est = videoedit.estimate(end - req.start, m["cost"])
-    return {**est, "confirm": est["usd"] > 0.25, "seconds": round(end - req.start, 2), "tokens_per_usd": await groups.atoken_rate()}
+    return {"src": src, "start": start, "end": end, "model": model}
+
+
+@router.get("/video/edit/info")
+async def video_edit_info(source_url: str, user: dict = Depends(current_user)):
+    """Para o node: duração do vídeo ligado, se há túnel e os modelos que ele pode escolher."""
+    src = await _video_source(source_url, user)
+    native = videoedit.native_available()
+    rate = await groups.atoken_rate()  # o usuário vê tokens, nunca o valor em dinheiro
+    models = [{"id": m["id"], "label": m["label"], "tokens_per_s": round(m["usd_per_s"] * rate, 2)}
+              for m in await asyncio.to_thread(videoedit.native_models, user)] if native else []
+    return {"duration": round(src["duration"], 2), "tunnel": native, "models": models,
+            "frames_max": videoedit.MAX_SECONDS, "native_max": videoedit.NATIVE_MAX_SECONDS}
+
+
+@router.post("/video/edit/quote")
+async def video_edit_quote(req: videoedit.VideoEditRequest, user: dict = Depends(current_user)):
+    """Estimativa antes de editar: pedaços/quadros e custo em US$ (o front pede confirmação acima de US$ 0,25)."""
+    plan = await _video_edit_plan(req, user)
+    seconds = plan["end"] - plan["start"]
+    if plan["model"]:
+        mod = plan["model"]
+        est = videoedit.estimate_native(seconds, mod["usd_per_s"], mod["chunk_s"], mod["min_usd"])
+    else:
+        m = registry.pick(user, "image", "auto", {"t2i": True})
+        if not m:
+            raise HTTPException(400, "Nenhum modelo de imagem disponível para editar os quadros")
+        est = videoedit.estimate(seconds, m["cost"])
+    return {**est, "confirm": est["usd"] > 0.25, "seconds": round(seconds, 2), "tokens_per_usd": await groups.atoken_rate()}
 
 
 @router.post("/video/edit")
 async def video_edit(req: videoedit.VideoEditRequest, user: dict = Depends(current_user)):
-    """Edita um trecho de um vídeo (até 10 s) por quadros; o resto volta original. Cota, fila e versões."""
-    src = await _video_source(req.source_url, user)
-    end = min(req.end, src["duration"])
-    try:
-        videoedit.validate_segment(req.start, end, src["duration"])
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
+    """Edita um vídeo: inteiro pelo modelo de edição de vídeo (com o túnel, até 120 s, em pedaços) ou, por quadros, um
+    trecho de até 10 s. O resto volta original. Cota, fila e versões."""
+    plan = await _video_edit_plan(req, user)
+    model = plan["model"]
+    op = {"start": plan["start"], "end": plan["end"], "prompt": req.prompt, "preset": req.preset,
+          "strength": req.strength, "preserve_audio": req.preserve_audio, "native": model is not None,
+          "mode": req.mode, "ref_urls": list(req.ref_urls)}
+    if model:
+        op.update(model_id=model["model_id"], key_id=model["key_id"], usd_per_s=model["usd_per_s"],
+                  chunk_s=model["chunk_s"], min_usd=model["min_usd"], generic=model["generic"], reg_id=model["reg_id"])
     return await _image_job(user, jobs.RenderRequest(
         node_id=req.node_id, name=req.name, gen="videoedit", prompt=videoedit.instruction(req), keyframe_prompt=req.preset,
-        duration=videoedit.segment_seconds(req.start, end), ref_image_urls=[req.source_url],
-        local_op={"start": req.start, "end": end, "prompt": req.prompt, "preset": req.preset,
-                  "strength": req.strength, "preserve_audio": req.preserve_audio}))
+        duration=videoedit.segment_seconds(plan["start"], plan["end"]), ref_image_urls=[req.source_url], local_op=op))
 
 
 @router.post("/audio/speech")

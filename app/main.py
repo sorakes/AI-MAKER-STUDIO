@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import assets, auth, branding, db, groups, jobs, registry
+from . import assets, auth, branding, db, groups, jobs, registry, tunnel
 from .config import PUBLIC_URL, STATIC_DIR
 from .routers import admin, studio
 from .routers import auth as auth_routes
@@ -69,6 +69,25 @@ async def security_headers(request: Request, call_next):
     if request.url.path.startswith(("/js/", "/css/")):
         resp.headers["Cache-Control"] = "no-cache"  # sempre revalida (ETag): nunca roda JS/CSS antigo após update
     return resp
+
+
+@app.middleware("http")
+async def tunnel_gate(request: Request, call_next):
+    """Pelo túnel público só `/pub/<token>/<arquivo>` responde. Todo o resto (estúdio, login, API, /files) dá 404,
+    como se não existisse: o túnel serve um arquivo por vez e nunca expõe o app."""
+    if tunnel.is_tunnel_request(request.headers.get("host", ""), "cf-connecting-ip" in request.headers) \
+            and not request.url.path.startswith("/pub/"):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return await call_next(request)
+
+
+@app.api_route("/pub/{token}/{name}", methods=["GET", "HEAD"], include_in_schema=False)
+def public_file(token: str, name: str):
+    """Link temporário (túnel) para o provedor baixar um arquivo; expira sozinho ou quando o resultado chega."""
+    path = tunnel.lookup(token, name)
+    if not path:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return FileResponse(path, headers={"Cache-Control": "no-store", "Content-Disposition": "inline"})
 
 
 app.include_router(auth_routes.router)

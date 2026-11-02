@@ -33,7 +33,7 @@ function performanceBody(n) {
     </div>
     <div class="cv-meta"><span>${audio ? 'Áudio ligado: usado só para a duração.' : 'Sem áudio ligado: a duração vem do texto.'}</span></div>
     ${q ? `<div class="cv-meta"><span>Estimativa: ${q.seconds} s, cerca de ${fmtTok(Math.round(q.usd * q.tokens_per_usd))}.</span></div>` : ''}
-    ${q?.confirm ? `<label class="vedit-check"><input type="checkbox" data-role="perf-confirm"> Confirmo o custo estimado (acima de US$ ${PERF_CONFIRM_USD.toFixed(2)})</label>` : ''}
+    ${q?.confirm ? `<label class="vedit-check"><input type="checkbox" data-role="perf-confirm"> Confirmo o custo estimado (acima de ${fmtTok(PERF_CONFIRM_USD * (q.tokens_per_usd || 0))})</label>` : ''}
     ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
     <div class="cv-foot">
       <button class="btn ghost" data-act="perf-quote" ${busy || !src || !n.text.trim() ? 'disabled' : ''}>${ic('sparkles')} Ver custo</button>

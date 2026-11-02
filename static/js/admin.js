@@ -195,7 +195,8 @@ async function deleteUser(u) {
 // ---------------- Keys & modelos ----------------
 
 async function loadModels() {
-  [A.providers, A.models] = await Promise.all([api('/api/admin/providers'), api('/api/admin/models')]);
+  [A.providers, A.models, A.reqs] = await Promise.all([api('/api/admin/providers'), api('/api/admin/models'),
+    api('/api/admin/requirements').catch(() => [])]);
   $('#providers').innerHTML = A.providers.map((p) => `
     <div class="prov" data-p="${p.id}">
       <h4>${esc(p.label)} <span class="tag ${p.configured ? (p.enabled ? 'ok' : 'off') : 'err'}">${p.configured ? (p.enabled ? `${p.keys.length} key(s)` : 'desativado') : 'sem key'}</span></h4>
@@ -324,6 +325,28 @@ function renderRecommended() {
     <div class="needs">${REC_VIDEO_OR.map(card).join('')}</div>`;
 }
 
+// Modelos obrigatórios por recurso (nó): calculado no servidor (key, túnel, modelos fixos e cadastrados).
+const REQ_STATE = { ok: ['ok', 'check', 'funciona'], local: ['ok', 'check', 'sem modelo'], fallback: ['opt', 'alert', 'versão simples'],
+  missing: ['miss', 'alert', 'falta'] };
+
+function renderRequirements() {
+  const reqs = A.reqs || [];
+  if (!reqs.length) return '';
+  const missing = reqs.filter((r) => r.status === 'missing').length;
+  const rows = reqs.map((r) => {
+    const [cls, icon, tag] = REQ_STATE[r.status] || REQ_STATE.missing;
+    return `<div class="need ${cls}" data-req="${esc(r.key)}">
+      <span class="need-ic">${ic(icon)}</span>
+      <div class="need-main"><b>${esc(r.node)}</b><small>${esc(r.needs)}</small>${r.fix ? `<small class="err">${esc(r.fix)}</small>` : ''}</div>
+      <div class="need-model">${r.using ? esc(r.using) : '<small>nenhum</small>'}</div>
+      <span class="tag ${cls === 'ok' ? 'ok' : cls === 'miss' ? 'err' : ''}">${tag}</span>
+    </div>`;
+  }).join('');
+  return `<div class="section-label"><span>Modelos obrigatórios por recurso</span><span class="hint">${missing ? `${missing} recurso(s) sem o necessário` : 'tudo coberto'}</span></div>
+    <p class="note">O que cada nó precisa para funcionar. Alguns usam modelos fixos que não precisam ser cadastrados (só a key do OpenRouter); o Editar vídeo também precisa do túnel público.</p>
+    <div class="needs">${rows}</div>`;
+}
+
 function renderNeeds() {
   const ok = (m, need) => Object.entries(need).every(([k, v]) => !v || m.caps?.[k]);
   const rows = NEEDS.map((n) => {
@@ -342,7 +365,7 @@ function renderNeeds() {
   const missing = NEEDS.filter((n) => !A.models.some((m) => m.kind === n.kind && m.available && ok(m, n.need)) && !n.optional).length;
   $('#needsBox').innerHTML = `<div class="section-label"><span>O que o estúdio precisa</span><span class="hint">${missing ? `${missing} função(ões) sem modelo` : 'tudo coberto'}</span></div>
     <p class="note">Um modelo pode cobrir várias funções (ex.: um vídeo com texto→vídeo, imagem→vídeo e frame final cobre as três). ✓ = coberto por um modelo ativo com key.</p>
-    <div class="needs">${rows}</div>${renderRecommended()}`;
+    <div class="needs">${rows}</div>${renderRequirements()}${renderRecommended()}`;
   document.querySelectorAll('[data-rec]').forEach((b) => b.addEventListener('click', async () => {
     const prov = 'openrouter';
     const r = REC_VIDEO_OR.find((x) => x.id === b.dataset.rec);

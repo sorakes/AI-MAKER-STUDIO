@@ -96,7 +96,7 @@ def test_run_edits_only_the_segment_and_keeps_audio_and_length(tmp_path):
     src = _clip(tmp_path / "fonte.mp4", 4)
     dest = _renders(tmp_path) / "saida.mp4"
 
-    def fake_edit(prompt, frame_url):
+    def fake_edit(prompt, frame_url, prev=None):
         assert "sunset" in prompt and frame_url  # a instrução e o quadro chegam ao modelo
         return _red_png_uri(), 0.034
 
@@ -120,7 +120,7 @@ def test_run_without_audio_option_drops_the_track(tmp_path):
     src = _clip(tmp_path / "fonte.mp4", 3)
     dest = _renders(tmp_path) / "mudo.mp4"
     videoedit.run(src, {"start": 0, "end": 2, "prompt": "", "preset": "night", "strength": "low",
-                        "preserve_audio": False, "user_id": 1}, dest, lambda p, u: (_red_png_uri(), 0.01))
+                        "preserve_audio": False, "user_id": 1}, dest, lambda p, u, prev=None: (_red_png_uri(), 0.01))
     streams = subprocess.run([media._ff("ffprobe"), "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0",
                               str(dest)], capture_output=True, text=True).stdout
     assert "audio" not in streams and abs(media.probe(dest)["duration"] - 3.0) < 0.3
@@ -146,49 +146,17 @@ def _fake_image_model(monkeypatch):
     return fake
 
 
-def test_quote_reports_frames_and_confirmation_threshold(login, make_user, no_ai, monkeypatch):
+def test_api_no_longer_offers_the_frames_path(login, make_user, no_ai, monkeypatch):
+    """O node só usa modelos que recebem o vídeo: 'por quadros' e 'sem túnel' viram 400 com motivo claro."""
+    from app import tunnel
     _fake_image_model(monkeypatch)
     u = make_user(f"ve-q-{_uniq()}@test.local")
     c = login(u["email"], c=TestClient(app))
     me = auth.public_user(u)
     url = storage.to_url(_clip(storage.user_dir(me["id"], "uploads") / f"q-{_uniq()}.mp4", 4))
+    monkeypatch.setattr(tunnel, "public_host", lambda: "")
     r = c.post("/api/video/edit/quote", json={"source_url": url, "start": 0, "end": 4, "preset": "anime"})
-    assert r.status_code == 200, r.text
-    assert r.json()["frames"] == 4 and r.json()["confirm"] is False and abs(r.json()["usd"] - 0.136) < 1e-6
-    assert c.post("/api/video/edit/quote", json={"source_url": url, "start": 5, "end": 6}).status_code == 400  # após o fim
-
-
-def test_edit_rejects_segments_longer_than_ten_seconds(login, make_user, no_ai, monkeypatch):
-    _fake_image_model(monkeypatch)
-    u = make_user(f"ve-long-{_uniq()}@test.local")
-    c = login(u["email"], c=TestClient(app))
-    me = auth.public_user(u)
-    url = storage.to_url(_clip(storage.user_dir(me["id"], "uploads") / f"l-{_uniq()}.mp4", 4))
-    assert c.post("/api/video/edit", json={"source_url": url, "start": 6, "end": 7}).status_code == 400  # depois do fim
-
-
-@needs_ffmpeg
-def test_edit_job_end_to_end_with_simulated_image_model(login, make_user, no_ai, monkeypatch):
-    _fake_image_model(monkeypatch)
-    calls = []
-
-    def fake_openrouter_image(m, prompt, spec, ref_urls=None):
-        calls.append(prompt)
-        return _red_png_uri(), 0.034
-
-    monkeypatch.setattr(jobs, "_openrouter_image", fake_openrouter_image)
-    started = []
-    monkeypatch.setattr(jobs, "start", lambda job, user, resume=False: started.append(job))
-    u = make_user(f"ve-job-{_uniq()}@test.local")
-    c = login(u["email"], c=TestClient(app))
-    me = auth.public_user(u)
-    url = storage.to_url(_clip(storage.user_dir(me["id"], "uploads") / f"j-{_uniq()}.mp4", 4))
-    r = c.post("/api/video/edit", json={"source_url": url, "start": 1, "end": 3, "preset": "sunset", "strength": "high",
-                                        "prompt": "", "preserve_audio": True})
-    assert r.status_code == 200, r.text
-    asyncio.run(jobs._run(started[0], me))
-    job = started[0]
-    assert job["status"] == "done", job.get("error")
-    assert len(calls) == 2 and "sunset" in calls[0]  # um quadro por segundo do trecho
-    assert abs(sum(s["cost"] for s in job["steps"]) - 2 * 0.034) < 1e-9  # custo real somado dos quadros
-    assert job["output"].endswith(".mp4") and abs(job["media"]["duration"] - 4.0) < 0.3
+    assert r.status_code == 400 and "túnel" in r.json()["detail"]
+    monkeypatch.setattr(tunnel, "public_host", lambda: "h.trycloudflare.com")
+    r = c.post("/api/video/edit", json={"source_url": url, "whole": True, "preset": "anime", "model": "frames"})
+    assert r.status_code == 400 and "recebem o vídeo" in r.json()["detail"]
