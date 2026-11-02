@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from .. import assets, camera, db, groups, sprites, direction, director, jobs, llm, media, montage, promptgen, registry, storage, transitions, usage
+from .. import assets, camera, db, groups, sprites, direction, director, jobs, llm, media, montage, promptgen, registry, sketch, storage, transitions, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -140,6 +140,21 @@ async def spritesheet(body: sprites.SheetBody, user: dict = Depends(current_user
         raise HTTPException(400, str(e)) from e
     await usage.alog("montage", detail={"spritesheet": len(body.urls)})
     return out
+
+
+@router.post("/image/regenerate-from-sketch")
+async def regenerate_from_sketch(req: sketch.SketchRequest, user: dict = Depends(current_user)):
+    """Regera a imagem do nó a partir das marcações: visão escreve a edição, o gerador recebe a imagem original."""
+    if not sketch.active_layers(req):
+        raise HTTPException(400, "Desenhe ou escreva pelo menos uma marcação")
+    if not req.annotated.startswith("data:image/") or len(req.annotated) > 12 * 2**20:
+        raise HTTPException(400, "Imagem com as marcações inválida ou grande demais")
+    storage.resolve(req.source_url, user)  # a imagem de origem tem de ser do próprio usuário
+    edit = await asyncio.to_thread(sketch.plan_edit, req)
+    job = await asyncio.to_thread(jobs.prepare, user, sketch.build_request(req, edit))  # cotas, permissões, fila
+    jobs.start(job, user)
+    return {**_tok_job(job, await groups.atoken_rate()),
+            "edit": {"prompt_en": edit["edit_en"], "notes_pt": edit["notes_pt"], "source": edit["source"]}}
 
 
 @router.post("/direction/interpret")

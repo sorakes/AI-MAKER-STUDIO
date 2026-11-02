@@ -13,6 +13,9 @@ CATALOG = {
                     "help": "Depois que o still existe, reescreve o prompt de vídeo para bater com a imagem real.", "vars": []},
     "direction": {"node": "Câmera e movimento", "label": "Leitura do desenho no frame",
                   "help": "A IA de visão recebe o frame com o desenho (roxo = câmera, cores = elementos) e as notas.", "vars": []},
+    "sketch_edit": {"node": "Gerar imagem", "label": "Desenho para regerar",
+                    "help": "A IA de visão lê as marcações sobre a imagem (regiões, linhas e instruções por cor) e escreve a instrução de edição.",
+                    "vars": []},
     "director": {"node": "Roteiro", "label": "Decupagem do brief", "help": "Divide o brief em planos com câmera e duração.", "vars": []},
     "transition": {"node": "Transição", "label": "Plano de transição A→B", "help": "Planeja a passagem de câmera entre dois planos.", "vars": []},
     "caption": {"node": "Visão", "label": "Legenda de imagem", "help": "Descreve imagens (1º frame, referências) para os prompts.", "vars": []},
@@ -46,11 +49,12 @@ ASSET_DEFAULTS = {
 
 
 def _defaults() -> dict[str, str]:
-    from . import direction, director, promptgen, transitions  # import tardio: evita ciclo
+    from . import direction, director, promptgen, sketch, transitions  # import tardio: evita ciclo
     from .llm import CAPTION_PROMPT
     from .sprites import POSE_TEMPLATE, SUGGEST_SYSTEM
     return {"suggest": SUGGEST_SYSTEM, "pose_view": POSE_TEMPLATE, "autoprompt": promptgen.SYSTEM, "adapt_frame": promptgen.ADAPT_SYSTEM, "direction": direction.SYSTEM,
-            "director": director.SYSTEM, "transition": transitions.SYSTEM, "caption": CAPTION_PROMPT, **ASSET_DEFAULTS}
+            "director": director.SYSTEM, "transition": transitions.SYSTEM, "caption": CAPTION_PROMPT,
+            "sketch_edit": sketch.SYSTEM, **ASSET_DEFAULTS}
 
 
 def overrides() -> dict:
