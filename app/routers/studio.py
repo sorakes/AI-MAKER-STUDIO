@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from .. import assets, camera, db, groups, sprites, direction, director, jobs, llm, media, montage, promptgen, registry, sketch, storage, transitions, upscale, usage
+from .. import assets, camera, db, groups, sprites, direction, director, jobs, llm, media, montage, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -173,6 +173,45 @@ async def upscale_image(req: upscale.UpscaleRequest, user: dict = Depends(curren
     jobs.start(job, user)
     mode = "local" if job["steps"][0]["provider"] == "local" else "ai"
     return {**_tok_job(job, await groups.atoken_rate()), "mode": mode}
+
+
+async def _image_source(url: str, user: dict):
+    """Imagem do próprio usuário (403 se for de outro, 400 se não for imagem)."""
+    path = storage.resolve(url, user)
+    try:
+        await asyncio.to_thread(upscale.image_size, path)
+    except Exception as e:  # noqa: BLE001 - arquivo que não é imagem
+        raise HTTPException(400, "Arquivo de entrada não é uma imagem") from e
+
+
+async def _image_job(user: dict, rr: jobs.RenderRequest) -> dict:
+    job = await asyncio.to_thread(jobs.prepare, user, rr)  # cotas, permissões, fila e versões do render comum
+    jobs.start(job, user)
+    mode = "local" if job["steps"][0]["provider"] == "local" else "ai"
+    return {**_tok_job(job, await groups.atoken_rate()), "mode": mode}
+
+
+@router.post("/image/relight")
+async def relight_image(req: relight.RelightRequest, user: dict = Depends(current_user)):
+    """Relight: presets de luz + direção desenhada + intensidade. Sem modelo com referências, ajuste local."""
+    await _image_source(req.source_url, user)
+    prompt = relight.relight_prompt(req)
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="relight", model=req.model, prompt=prompt, keyframe_prompt=prompt,
+        ref_image_urls=[req.source_url],
+        local_op={"kind": "relight", "preset": req.preset, "intensity": req.intensity, "light": req.light}))
+
+
+@router.post("/image/style-transfer")
+async def style_transfer(req: relight.StyleRequest, user: dict = Depends(current_user)):
+    """Estilo: a segunda imagem dá a paleta, a luz e o clima; a força diz quanto aplicar."""
+    await _image_source(req.source_url, user)
+    await _image_source(req.style_url, user)
+    prompt = relight.style_prompt(req)
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="style", model=req.model, prompt=prompt, keyframe_prompt=prompt,
+        ref_image_urls=[req.source_url, req.style_url],  # ordem importa: imagem 1 = original, imagem 2 = estilo
+        local_op={"kind": "style", "strength": req.strength}))
 
 
 @router.post("/direction/interpret")
