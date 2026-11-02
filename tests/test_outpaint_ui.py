@@ -20,7 +20,7 @@ def test_edit_node_is_in_palette_of_all_image_workspaces():
 def test_edit_node_calls_both_endpoints_and_waits_on_the_job():
     src = _text(JS / "canvas.js")
     assert "'/api/image/outpaint'" in src and "'/api/image/inpaint'" in src
-    assert "return watchJob(n)" in src.split("async function runEdit")[1][:2000]
+    assert "return watchJob(n)" in src.split("async function runEditOnce")[1][:2500]  # o corpo fica em runEditOnce
 
 
 def test_mask_dialog_is_wired_in_the_studio_page():
