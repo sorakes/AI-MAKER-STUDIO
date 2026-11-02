@@ -20,7 +20,7 @@ def test_speak_node_is_in_palette_of_character_and_video_workspaces():
 def test_speak_node_calls_the_lipsync_endpoint_and_waits_on_the_job():
     src = _text(JS / "canvas.js")
     assert "'/api/video/lipsync'" in src
-    assert "return watchJob(n)" in src.split("async function runSpeak")[1][:1800]
+    assert "return watchJob(n)" in src.split("async function startSpeakJob")[1][:900]  # um único caminho de envio
 
 
 def test_honest_fallback_message_is_shown_in_the_node():
