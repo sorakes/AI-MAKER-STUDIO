@@ -17,7 +17,7 @@ import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from . import db, media, promptgen, providers, registry, storage, usage
+from . import db, media, promptgen, providers, registry, storage, upscale, usage
 from .auth import CURRENT, public_user
 
 JOBS: dict[str, dict] = {}
@@ -44,6 +44,7 @@ class RenderRequest(BaseModel):
     require_refs: bool = False         # posições de personagem/produto: só modelos que recebem as referências
     compose: bool = False              # 1º frame conectado + elenco: gera antes um 1º frame com o elenco na cena
     direction_image_url: str | None = None  # desenho da câmera/elementos sobre o 1º frame (referência do vídeo)
+    upscale_factor: int = 0  # gen=upscale: fator final (2 ou 4); a saída da IA é levada a esse tamanho
 
 
 def _step(kind: str, m: dict, label: str) -> dict:
@@ -53,6 +54,9 @@ def _step(kind: str, m: dict, label: str) -> dict:
 
 def plan(user: dict, r: RenderRequest) -> list[dict]:
     refs_need = {"refs": True} if r.ref_image_urls else {"t2i": True}
+    if r.gen == "upscale":  # IA com referências se houver modelo; senão upscale simples local
+        m = upscale.pick(user, r.model)
+        return [_step("image", m or upscale.LOCAL, "Upscale criativo" if m else "Upscale simples")]
 
     def image_model(choice):
         m = None
@@ -199,12 +203,12 @@ def prepare(user: dict, r: RenderRequest) -> dict:
         for p in need:
             if not perms.get(p, True):
                 raise HTTPException(403, f"Sem permissão para {labels[p]}. Fale com o administrador.")
-    models = {s["model"]: registry.get(s["model"]) for s in steps}
+    models = {s["model"]: (upscale.LOCAL if s["provider"] == "local" else registry.get(s["model"])) for s in steps}
     for s in steps:
         s["est"] = registry.estimate(models[s["model"]], r.duration if s["kind"] == "video" else 1)
     est = sum(s["est"] for s in steps)
     usage.check(user, images=sum(s["kind"] == "image" for s in steps), videos=sum(s["kind"] == "video" for s in steps),
-                est_cost=est, model_ids=list(models), pending=_pending(user["id"]))
+                est_cost=est, model_ids=[k for k in models if k != upscale.LOCAL_ID], pending=_pending(user["id"]))
     job = {"id": f"job-{uuid.uuid4().hex[:10]}", "user_id": user["id"], "created": time.time(), "status": "queued",
            "progress": 0, "detail": None, "error": None, "spec": r.model_dump(), "steps": steps,
            "est_cost": round(est, 4), "output": None, "media": None, "keyframe": None}
@@ -352,7 +356,7 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 if st["kind"] == "image":
                     prev_image = st["output"]
                 continue
-            m = await registry.aget(st["model"])
+            m = upscale.LOCAL if st["model"] == upscale.LOCAL_ID else await registry.aget(st["model"])
             if not m:
                 raise RuntimeError("modelo removido do painel durante o render")
             st["status"] = "running"
@@ -404,6 +408,11 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     job["detail"] = "salvando vídeo"
                     st["output"] = await asyncio.to_thread(_store_bytes, job, i, data, ".mp4")
                     url = None
+                elif m["provider"] == "local":  # upscale simples: Pillow, sem provedor
+                    src = storage.resolve(spec.ref_image_urls[0], user)
+                    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}.png"
+                    await asyncio.to_thread(upscale.resize_file, src, spec.upscale_factor, dest)
+                    st["output"], cost, url = storage.to_url(dest), 0.0, None  # já gravado: nada a baixar
                 elif m["provider"] == "openrouter":
                     url, cost = await asyncio.to_thread(_openrouter_image, m, prompt, spec, step_refs)
                 else:
@@ -411,6 +420,9 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 if url:
                     job["detail"] = "baixando resultado"
                     st["output"] = await asyncio.to_thread(_store, job, i, url, st["kind"])
+                    if spec.upscale_factor:  # IA devolve tamanho próprio: leva ao fator pedido
+                        job["detail"] = "ajustando ao tamanho final"
+                        await asyncio.to_thread(upscale.resize_file, storage.resolve(st["output"]), spec.upscale_factor)
             except Exception as e:
                 await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], status="error",
                           detail={"job": job["id"], "error": str(e)[:400]})
