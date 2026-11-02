@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, camera, db, extend, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, audio, camera, db, extend, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -404,6 +404,30 @@ async def direction_interpret(req: direction.DirectionRequest, user: dict = Depe
 async def director_plan(req: director.PlanRequest, user: dict = Depends(need("ai_assist"))):
     require(user, "node_brief")
     return await asyncio.to_thread(director.plan, req)
+
+
+@router.post("/audio/speech")
+async def audio_speech(req: audio.SpeechRequest, user: dict = Depends(current_user)):
+    """Voz: texto -> áudio (modelo de saída de áudio do OpenRouter). Cota, fila e versões como os outros renders."""
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="speech", prompt=req.text, keyframe_prompt=req.text,
+        duration=audio.speech_seconds(req.text), local_op={"voice": req.voice, "speed": req.speed}))
+
+
+@router.post("/audio/music")
+async def audio_music(req: audio.MusicRequest, user: dict = Depends(current_user)):
+    """Música por prompt (Lyria), cortada no tamanho pedido."""
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="music", prompt=audio.music_prompt(req), keyframe_prompt=req.genre,
+        duration=float(req.seconds), local_op={"seconds": req.seconds}))
+
+
+@router.post("/audio/sfx")
+async def audio_sfx(req: audio.SfxRequest, user: dict = Depends(current_user)):
+    """Efeito da biblioteca sintetizada (ffmpeg): não é gravação, o nó mostra isso."""
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="sfx", prompt=req.kind, keyframe_prompt=req.kind,
+        duration=req.seconds, local_op={"kind": req.kind, "seconds": req.seconds}))
 
 
 @router.post("/storyboard/plan")

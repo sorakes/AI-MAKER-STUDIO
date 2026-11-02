@@ -17,7 +17,7 @@ import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from . import db, extend, lipsync, media, montage, outpaint, promptgen, providers, registry, relight, storage, subtitles, upscale, usage
+from . import audio as sound, db, extend, lipsync, media, montage, outpaint, promptgen, providers, registry, relight, storage, subtitles, upscale, usage
 from .auth import CURRENT, public_user
 
 JOBS: dict[str, dict] = {}
@@ -52,6 +52,9 @@ class RenderRequest(BaseModel):
     extend_transition: str = "none"  # como unir: none (corte) | dissolve
 
 
+# modelos virtuais do job (sem entrada no catálogo): transcrição e áudio
+VIRTUAL = {subtitles.STT_ID: subtitles.STT_LOCAL, **sound.VIRTUAL}
+
 def _step(kind: str, m: dict, label: str) -> dict:
     return {"kind": kind, "model": m["id"], "model_label": m["label"], "provider": m["provider"],
             "label": label, "status": "pending", "output": None, "handle": None, "cost": 0.0}
@@ -62,6 +65,8 @@ def plan(user: dict, r: RenderRequest) -> list[dict]:
     if r.gen == "upscale":  # IA com referências se houver modelo; senão upscale simples local
         m = upscale.pick(user, r.model)
         return [_step("image", m or upscale.LOCAL, "Upscale criativo" if m else "Upscale simples")]
+    if r.gen in sound.GEN_MODEL:  # voz, música ou efeito: custo real do provedor (efeito é local)
+        return [_step("audio", sound.GEN_MODEL[r.gen], sound.LABELS[r.gen])]
     if r.gen == "transcribe":  # áudio -> texto: modelo de áudio do OpenRouter (o mais barato com entrada de áudio)
         return [_step("text", subtitles.STT_LOCAL, "Transcrição")]
     if r.gen == "subtitles":  # legendas queimadas com ffmpeg (local)
@@ -226,7 +231,7 @@ def prepare(user: dict, r: RenderRequest) -> dict:
         for p in need:
             if not perms.get(p, True):
                 raise HTTPException(403, f"Sem permissão para {labels[p]}. Fale com o administrador.")
-    models = {s["model"]: (upscale.LOCAL if s["provider"] == "local" else subtitles.STT_LOCAL if s["model"] == subtitles.STT_ID
+    models = {s["model"]: (upscale.LOCAL if s["provider"] == "local" else VIRTUAL[s["model"]] if s["model"] in VIRTUAL
                            else registry.get(s["model"])) for s in steps}
     for s in steps:
         s["est"] = registry.estimate(models[s["model"]], r.duration if s["kind"] == "video" else 1)
@@ -380,7 +385,7 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 if st["kind"] == "image":
                     prev_image = st["output"]
                 continue
-            m = (upscale.LOCAL if st["model"] == upscale.LOCAL_ID else subtitles.STT_LOCAL if st["model"] == subtitles.STT_ID
+            m = (upscale.LOCAL if st["model"] == upscale.LOCAL_ID else VIRTUAL[st["model"]] if st["model"] in VIRTUAL
                  else await registry.aget(st["model"]))
             if not m:
                 raise RuntimeError("modelo removido do painel durante o render")
@@ -427,7 +432,12 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 prompt, caption = await asyncio.to_thread(promptgen.adapt_to_frame, spec.prompt, prev_image)
                 job["spec"]["prompt"], job["first_frame_caption"] = prompt, caption
             try:
-                if spec.gen == "transcribe":  # áudio do vídeo -> WAV -> modelo de áudio -> segmentos (guardados no job)
+                if spec.gen in sound.GEN_MODEL:  # voz, música ou efeito: arquivo de áudio (mp3) guardado no render
+                    job["detail"] = f"gerando {sound.LABELS[spec.gen].lower()}"
+                    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}.mp3"
+                    cost = await asyncio.to_thread(sound.run, spec.gen, spec, dest, m)
+                    st["output"], url = storage.to_url(dest), None
+                elif spec.gen == "transcribe":  # áudio do vídeo -> WAV -> modelo de áudio -> segmentos (guardados no job)
                     job["detail"] = "transcrevendo o áudio"
                     video = storage.resolve(spec.ref_image_urls[0], user)
                     wav = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_audio.wav"
