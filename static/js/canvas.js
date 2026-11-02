@@ -8,9 +8,9 @@ const cv = { nodes: [], edges: [], pan: { x: 60, y: 40 }, zoom: 0.9, sel: null, 
 
 // Cada área tem o próprio canvas e a própria paleta de nós.
 const WS_PALETTE = {
-  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'review', 'montage'],
-  character: ['chargen', 'save', 'sheet', 'image', 'upscale'],
-  product: ['prodgen', 'save', 'sheet', 'image', 'upscale'],
+  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'review', 'montage'],
+  character: ['chargen', 'save', 'sheet', 'image', 'upscale', 'relight'],
+  product: ['prodgen', 'save', 'sheet', 'image', 'upscale', 'relight'],
 };
 const WS_EMPTY = {
   video: 'Seu estúdio está vazio.<br>Envie fotos/vídeos ou adicione um nó <b>Gerar vídeo</b>, <b>Gerar imagem</b> ou <b>Roteiro</b>.',
@@ -437,6 +437,12 @@ const PALETTE = {
       + 'A saída é uma imagem: 1º frame de um novo vídeo, referência (R) ou entrada A/B de uma transição.',
     make: (pos) => newFrameNode(pos),
   },
+  relight: {
+    icon: 'sparkles', title: 'Relight / Estilo', tag: 'luz ou estilo de outra imagem',
+    what: 'Muda a luz de uma imagem (dourada, estúdio, neon, noite, contraluz) ou aplica o estilo de uma segunda imagem. A composição e as pessoas ficam como estão.',
+    how: 'Ligue a imagem na entrada. No modo Relight, escolha o preset, desenhe a direção da luz e a intensidade. No modo Estilo, ligue a imagem de estilo na entrada S e ajuste a força.',
+    make: (pos) => newRelight(pos),
+  },
   upscale: {
     icon: 'zoom-in', title: 'Upscale criativo', tag: 'imagem → maior',
     what: 'Amplia uma imagem 2x ou 4x. Com um modelo de imagem que aceite referências, a IA acrescenta detalhe (criatividade) mantendo a cena (semelhança). Sem esse modelo, é um upscale simples.',
@@ -502,7 +508,7 @@ function addNode(n) {
 
 // ---------------- Grafo ----------------
 
-const incoming = (id) => cv.edges.filter((e) => e.to === id && e.port !== 'ref').map((e) => byId(e.from)).filter(Boolean);
+const incoming = (id) => cv.edges.filter((e) => e.to === id && e.port !== 'ref' && e.port !== 'style').map((e) => byId(e.from)).filter(Boolean);
 
 // Referências de um gerador: as enviadas no próprio card + o que estiver ligado na porta R.
 function refsOf(n) {
@@ -519,7 +525,7 @@ function frameOf(n) {
   if (!n) return null;
   if (n.type === 'transition') return n.output?.last_frame || null;
   if (n.type === 'frame') return extractedFrame(n);
-  if (n.type === 'upscale') return n.output?.url || null;
+  if (n.type === 'upscale' || n.type === 'relight') return n.output?.url || null;
   if (n.type === 'review') return frameOf(incoming(n.id)[0]);
   if (n.type === 'media') return n.media.kind === 'video' ? n.media.last_frame : n.media.url;
   if (n.type === 'shot') return n.output?.last_frame || (n.output?.kind === 'image' ? n.output.url : null);
@@ -778,6 +784,7 @@ const KIND = {
   pose: { label: 'Posição', icon: 'frame' }, sheet: { label: 'Spritesheet', icon: 'dashboard' },
   save: { label: 'Salvar', icon: 'check-circle' },
   upscale: { label: 'Upscale', icon: 'zoom-in' },
+  relight: { label: 'Relight / Estilo', icon: 'sparkles' },
 };
 
 function nodeEl(n) {
@@ -801,9 +808,12 @@ function nodeEl(n) {
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
       <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
-    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
+    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
       ? '<span class="cv-port in" data-port="a" title="Entrada A: vídeo ou imagem de onde a transição sai"><i>A</i></span><span class="cv-port in port-b" data-port="b" title="Entrada B: vídeo ou imagem onde a transição chega"><i>B</i></span>'
+      : n.type === 'relight'
+        ? '<span class="cv-port in" title="Entrada: imagem a tratar"></span>'
+          + '<span class="cv-port in port-b" data-port="style" title="S: imagem de estilo (modo Estilo)"><i>S</i></span>'
       : n.type === 'shot'
         ? `${n.gen !== 'image' ? '<span class="cv-port in" title="Entrada: imagem ou vídeo (vira o 1º frame)"></span>' : ''}<span class="cv-port in port-ref" data-port="ref" title="R: imagens de referência (logo, produto, estilo)"><i>R</i></span>`
         : n.type === 'brief' ? '<span class="cv-port in" title="Entrada: nós de Elenco/Produto"></span>'
@@ -827,6 +837,7 @@ function nodeEl(n) {
   if (n.type === 'transition') bindTransition(el, n);
   if (n.type === 'frame') bindFrameNode(el, n);
   if (n.type === 'upscale') bindUpscale(el, n);
+  if (n.type === 'relight') bindRelight(el, n);
   if (n.type === 'review') bindReview(el, n);
   if (n.type === 'brief') bindBrief(el, n);
   if (n.type === 'cast') bindCast(el, n);
@@ -837,6 +848,109 @@ function nodeEl(n) {
   bindPreview(el, n);
   applySpawn(el, n);
   return el;
+}
+
+// ---------------- Relight / Estilo ----------------
+
+function newRelight(pos) {
+  return { id: uid('rl'), type: 'relight', name: t('Relight'), op: 'relight', preset: 'studio', intensity: 60, strength: 60,
+    prompt: '', lightDir: null, model: 'auto', status: 'idle', output: null, takes: [], jobId: null, opMode: null, ...pos };
+}
+
+// Entrada principal = imagem a tratar; entrada S = imagem de estilo (modo Estilo).
+function connectRelight(from, to, port) {
+  if (port === 'style') cv.edges = cv.edges.filter((e) => !(e.to === to.id && e.port === 'style'));
+  else cv.edges = cv.edges.filter((e) => !(e.to === to.id && e.port !== 'style' && e.port !== 'ref'));
+  cv.edges.push({ id: uid('e'), from: from.id, to: to.id, ...(port === 'style' ? { port: 'style' } : {}) });
+  invalidate(to);
+  renderNode(to);
+  save();
+  toast(port === 'style' ? `${from.name} é a imagem de estilo (entrada S)` : `${from.name} é a imagem a tratar`);
+}
+
+const styleSourceOf = (n) => frameOf(byId(cv.edges.find((e) => e.to === n.id && e.port === 'style')?.from));
+
+const relightModeNote = (n) => (n.opMode === 'local'
+  ? 'Sem modelo com referências: ajuste simples (Pillow). A IA não foi usada.'
+  : n.opMode === 'ai' ? 'Relight com IA: a composição e as pessoas são preservadas.'
+    : 'Com um modelo de imagem que aceite referências a IA faz o trabalho; sem ele, o ajuste é simples (Pillow).');
+
+function relightBody(n) {
+  const src = upscaleSource(n);
+  const style = n.op === 'style';
+  const styleSrc = style ? styleSourceOf(n) : null;
+  const done = !!n.output;
+  const presets = [['golden', 'Luz dourada'], ['studio', 'Estúdio'], ['neon', 'Neon'], ['night', 'Noite'], ['backlight', 'Contraluz']];
+  const ops = `${opt('relight', n.op, 'Relight (luz)')}${opt('style', n.op, 'Estilo (de outra imagem)')}`;
+  const body = style
+    ? `<div class="cv-meta"><span>${styleSrc ? 'Imagem de estilo ligada na entrada S.' : '<span class="err">Ligue a imagem de estilo na entrada S</span>'}</span></div>
+      ${sliderField('strength', 'Força', n.strength)}`
+    : `${field('Preset de luz', `<select data-k="preset">${presets.map(([k, v]) => opt(k, n.preset, v)).join('')}</select>`)}
+      ${sliderField('intensity', 'Intensidade', n.intensity)}
+      <div class="cv-meta"><span>${n.lightDir ? 'Direção da luz desenhada.' : 'Sem direção desenhada: a luz segue o preset.'}</span></div>
+      <button class="btn small ghost" data-act="light" ${src ? '' : 'disabled'}>${ic('route')} Desenhar direção da luz</button>`;
+  return `
+    ${previewBlock(n, { placeholder: { icon: 'sparkles', text: src ? '' : 'Ligue uma imagem na entrada' }, ghost: src })}
+    ${src ? '' : `<div class="cv-meta"><span class="err">${ic('alert')} Ligue uma imagem na entrada</span></div>`}
+    ${field('Modo', `<select data-k="op">${ops}</select>`)}
+    ${body}
+    ${field('Nota (opcional)', `<textarea data-k="prompt" rows="2" maxlength="1000" placeholder="Ex.: a luz bate na garrafa de lado">${esc(n.prompt)}</textarea>`)}
+    <div class="cv-meta"><span>${esc(relightModeNote(n))}</span></div>
+    ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
+    <div class="cv-foot">
+      <button class="btn primary" data-act="relight" ${n.status === 'running' || !src ? 'disabled' : ''}>${ic('sparkles')} ${done ? 'Aplicar de novo' : (style ? 'Aplicar estilo' : 'Aplicar luz')}</button>
+    </div>`;
+}
+
+function bindRelight(el, n) {
+  el.querySelectorAll('[data-k]').forEach((inp) => {
+    const range = inp.type === 'range';
+    if (inp.dataset.k === 'op') {
+      inp.addEventListener('change', () => { n.op = inp.value; save(); renderNode(n); });
+      return;
+    }
+    const ev = range || inp.tagName === 'TEXTAREA' ? 'input' : 'change';
+    inp.addEventListener(ev, () => {
+      const k = inp.dataset.k;
+      n[k] = range ? +inp.value : inp.value;
+      if (range) {
+        el.querySelector(`output[data-out="${k}"]`).textContent = inp.value;
+        inp.setAttribute('aria-valuetext', inp.value);
+      }
+      save();
+    });
+  });
+  el.querySelector('[data-act=light]')?.addEventListener('click', () => openLight(n));
+  el.querySelector('[data-act=relight]')?.addEventListener('click', () => runRelight(n).catch((err) => toast(err.message)));
+}
+
+// Relight ou estilo: entra na fila de jobs. Sem modelo com referências, o ajuste local avisa na UI.
+async function runRelight(n) {
+  const src = upscaleSource(n);
+  if (!src) return toast('Ligue uma imagem na entrada');
+  if (n.status === 'running') return;
+  let job;
+  try {
+    if (n.op === 'style') {
+      const style = styleSourceOf(n);
+      if (!style) return toast('Ligue a imagem de estilo na entrada S');
+      job = await api('/api/image/style-transfer', { node_id: n.id, name: n.name, source_url: src, style_url: style,
+        strength: +n.strength, prompt: n.prompt || '', model: n.model || 'auto' });
+    } else {
+      job = await api('/api/image/relight', { node_id: n.id, name: n.name, source_url: src, preset: n.preset,
+        intensity: +n.intensity, light: n.lightDir || null, model: n.model || 'auto' });
+    }
+  } catch (err) {
+    Object.assign(n, { status: 'error', error: err.message });
+    renderNode(n);
+    throw err;
+  }
+  n.opMode = job.mode;
+  Object.assign(n, { jobId: job.id, status: 'running', progress: 0, error: null, stage: job.mode === 'local' ? 'ajuste simples' : 'enviado', cost: null });
+  renderNode(n);
+  save();
+  toast(job.mode === 'local' ? `${n.name}: ajuste simples (sem modelo com referências)` : `${n.name}: aplicando com IA`);
+  return watchJob(n);
 }
 
 // ---------------- Upscale criativo ----------------
@@ -1241,6 +1355,7 @@ function startLink(e, from) {
 
 function connect(from, to, port) {
   if (GEN_KIND[to.type]) port = 'ref';
+  if (to.type === 'relight') return connectRelight(from, to, port);
   if (from.type === 'cast') {
     if (to.type === 'shot' || GEN_KIND[to.type]) port = 'ref';
     else if (to.type === 'brief') {
