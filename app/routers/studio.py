@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from .. import assets, camera, db, groups, sprites, direction, director, jobs, llm, media, montage, promptgen, registry, sketch, storage, transitions, usage
+from .. import assets, camera, db, groups, sprites, direction, director, jobs, llm, media, montage, promptgen, registry, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -155,6 +155,24 @@ async def regenerate_from_sketch(req: sketch.SketchRequest, user: dict = Depends
     jobs.start(job, user)
     return {**_tok_job(job, await groups.atoken_rate()),
             "edit": {"prompt_en": edit["edit_en"], "notes_pt": edit["notes_pt"], "source": edit["source"]}}
+
+
+@router.post("/image/upscale")
+async def upscale_image(req: upscale.UpscaleRequest, user: dict = Depends(current_user)):
+    """Upscale 2x/4x: entra na fila de jobs (cotas e tokens iguais aos demais renders)."""
+    src = storage.resolve(req.source_url, user)  # imagem do próprio usuário
+    try:
+        w, h = await asyncio.to_thread(upscale.image_size, src)
+    except Exception as e:  # noqa: BLE001 - arquivo que não é imagem
+        raise HTTPException(400, "Arquivo de entrada não é uma imagem") from e
+    prompt = upscale.prompt_for(req, w, h)
+    rr = jobs.RenderRequest(node_id=req.node_id, name=req.name, gen="upscale", model=req.model, prompt=prompt,
+                            keyframe_prompt=prompt, quality=req.quality, ref_image_urls=[req.source_url],
+                            upscale_factor=req.factor)
+    job = await asyncio.to_thread(jobs.prepare, user, rr)
+    jobs.start(job, user)
+    mode = "local" if job["steps"][0]["provider"] == "local" else "ai"
+    return {**_tok_job(job, await groups.atoken_rate()), "mode": mode}
 
 
 @router.post("/direction/interpret")
