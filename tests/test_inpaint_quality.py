@@ -46,7 +46,8 @@ def test_feather_resizes_ai_output_with_other_dimension(tmp_path):
 
 def test_prompt_removal_with_identification_is_semantic_and_has_no_magenta():
     ident = {"target": "the bee's wings", "type": "object", "surroundings": "the bee's body and a blurred green background"}
-    p = o.inpaint_prompt(o.InpaintRequest(source_url="/f.png", mask="x", prompt="remova oq está circulado"), ident=ident)
+    req = o.InpaintRequest(source_url="/f.png", mask="x", prompt="remova oq está circulado", input_mode="clean")
+    p = o.inpaint_prompt(req, ident=ident)
     assert p.startswith("Remove the bee's wings from this photo.")
     assert "the bee's body and a blurred green background" in p
     assert "magenta" not in p.lower() and "circulado" not in p.lower()
@@ -54,9 +55,38 @@ def test_prompt_removal_with_identification_is_semantic_and_has_no_magenta():
 
 def test_prompt_replacement_with_identification():
     ident = {"target": "the bee's wings", "type": "object", "surroundings": "a blurred background"}
-    p = o.inpaint_prompt(o.InpaintRequest(source_url="/f.png", mask="x", prompt="troque por um girassol"), ident=ident)
+    req = o.InpaintRequest(source_url="/f.png", mask="x", prompt="troque por um girassol", input_mode="clean")
+    p = o.inpaint_prompt(req, ident=ident)
     assert p.startswith("Replace the bee's wings with: troque por um girassol.")
     assert "magenta" not in p.lower()
+
+
+def test_annotated_prompt_labels_two_images_and_never_mentions_a_mask_image():
+    ident = {"target": "the bee's wings", "type": "object", "surroundings": "the bee's body and a blurred green background"}
+    req = o.InpaintRequest(source_url="/f.png", mask="x", prompt="remova oq está circulado")  # padrão: annotated
+    p = o.inpaint_prompt(req, ident=ident)
+    assert p.startswith("Image 1: original photo. Image 2: the same photo with the area to edit painted in magenta.")
+    assert "Remove the bee's wings from image 1" in p
+    assert "Image 3" not in p and "mask" not in p.lower()  # a máscara não é enviada ao modelo
+    assert "must look like a normal, unmarked photo" in p  # não reproduzir a pintura
+    assert "circulado" not in p.lower()
+
+
+def test_annotated_prompt_without_identification_uses_the_painted_area():
+    req = o.InpaintRequest(source_url="/f.png", mask="x", prompt="")
+    p = o.inpaint_prompt(req, ident=None)
+    assert "the object inside the magenta area of image 2" in p
+    assert p.startswith("Image 1: original photo.")
+
+
+def test_annotated_image_tints_the_region_and_keeps_the_rest():
+    src = Image.new("RGB", (100, 100), (30, 120, 200))
+    mask = Image.new("L", (100, 100), 0)
+    mask.paste(255, (30, 30, 70, 70))
+    out = o.annotated_image(src, mask)
+    assert out.getpixel((0, 0)) == (30, 120, 200)  # fora: a foto
+    assert out.getpixel((50, 50)) != (30, 120, 200)  # dentro: tingida de magenta
+    assert out.getpixel((50, 50))[0] > 60 and out.getpixel((50, 50))[1] < 120  # ainda é a foto por baixo (semitransparente)
 
 
 def test_prompt_reinforce_and_clean_mask_variant():
@@ -74,7 +104,8 @@ def test_prompt_marked_variant_keeps_magenta_as_only_clue():
 
 
 def test_prompt_fallback_without_vision_uses_magenta_and_no_user_text():
-    p = o.inpaint_prompt(o.InpaintRequest(source_url="/f.png", mask="x", prompt="remova oq está circulado"), ident=None)
+    req = o.InpaintRequest(source_url="/f.png", mask="x", prompt="remova oq está circulado", input_mode="marked")
+    p = o.inpaint_prompt(req, ident=None)
     assert "MAGENTA" in p and "Remove the object or part inside the magenta region" in p
     assert "circulado" not in p
 

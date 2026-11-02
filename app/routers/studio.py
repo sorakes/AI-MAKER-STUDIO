@@ -155,7 +155,9 @@ async def regenerate_from_sketch(req: sketch.SketchRequest, user: dict = Depends
         raise HTTPException(400, "Imagem com as marcações inválida ou grande demais")
     storage.resolve(req.source_url, user)  # a imagem de origem tem de ser do próprio usuário
     edit = await asyncio.to_thread(sketch.plan_edit, req)
-    out = await _image_job(user, sketch.build_request(req, edit), edit=True)  # cotas, permissões, fila
+    # o gerador recebe também a imagem com as marcações (imagem 2), além da original e do texto
+    annotated_url = storage.to_url(await asyncio.to_thread(storage.save_temp_data_url, user["id"], req.annotated))
+    out = await _image_job(user, sketch.build_request(req, edit, annotated_url), edit=True)  # cotas, permissões, fila
     return {**out, "edit": {"prompt_en": edit["edit_en"], "notes_pt": edit["notes_pt"], "source": edit["source"]}}
 
 
@@ -272,29 +274,35 @@ async def inpaint_image(req: outpaint.InpaintRequest, user: dict = Depends(curre
             m = mk.convert("L").resize(src.size).point(lambda v: 255 if v > 127 else 0)
         if m.getbbox() is None:
             raise ValueError("Pinte a região que será editada")
-        marked, keep, mask = (storage.temp_file(user["id"], f"_{k}.png") for k in ("marked", "keep", "mask"))  # pasta oculta
+        if req.fill_enclosed:  # contorno fechado (ex.: círculo em volta das asas) vira região cheia, também para nodes antigos
+            m = outpaint.fill_enclosed(m)
+        marked, keep, mask, painted = (storage.temp_file(user["id"], f"_{k}.png") for k in ("marked", "keep", "mask", "painted"))  # pasta oculta
         outpaint.marked_image(src, m).save(marked)
         outpaint.keep_for_inpaint(m).save(keep)
         m.save(mask)
+        outpaint.annotated_image(src, m).save(painted)  # a foto com a região (já preenchida) pintada em magenta
         ident, ident_usd = outpaint.identify_region(src, m)  # visão: o que está dentro do contorno (cacheado no job)
-        return src.size, marked, keep, mask, ident, ident_usd
+        return src.size, marked, keep, mask, painted, ident, ident_usd
 
     try:
-        size, marked, keep, mask, ident, ident_usd = await asyncio.to_thread(build)
+        size, marked, keep, mask, painted, ident, ident_usd = await asyncio.to_thread(build)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     prompt = outpaint.inpaint_prompt(req, reinforce=req.reinforce, ident=ident)
-    if ident and req.input_mode == "clean":
-        refs = [req.source_url]  # original limpa: a IA apaga/troca o objeto descrito, sem magenta na imagem
-    elif ident and req.input_mode == "clean_mask":
-        refs = [req.source_url, storage.to_url(mask)]  # original + máscara como 2ª referência
-    else:  # marked, ou sem identificação: a região magenta é a única pista
-        refs = [storage.to_url(marked)]
+    # o modelo recebe exatamente: original limpa + pintada + texto (a máscara só serve à recomposição, aqui)
+    if req.input_mode == "annotated":
+        refs, images = [req.source_url, storage.to_url(painted)], ["original", "pintada"]
+    elif ident and req.input_mode == "clean":  # diagnóstico: só a original limpa
+        refs, images = [req.source_url], ["original"]
+    elif ident and req.input_mode == "clean_mask":  # diagnóstico: original + máscara
+        refs, images = [req.source_url, storage.to_url(mask)], ["original", "mascara"]
+    else:  # diagnóstico 'marked' ou sem identificação: só a região magenta sólida
+        refs, images = [storage.to_url(marked)], ["marcada"]
     return await _image_job(user, jobs.RenderRequest(
         node_id=req.node_id, name=req.name, gen="inpaint", model=req.model, prompt=prompt, keyframe_prompt=prompt,
         ref_image_urls=refs,
         local_op={"kind": "inpaint", "original_url": req.source_url, "mask_url": storage.to_url(mask),
-                  "ident": ident, "ident_usd": ident_usd, "input_mode": req.input_mode},
+                  "ident": ident, "ident_usd": ident_usd, "input_mode": req.input_mode, "images": images},
         composite={"original_url": req.source_url, "keep_mask_url": storage.to_url(keep), "size": list(size)}), edit=True)
 
 
