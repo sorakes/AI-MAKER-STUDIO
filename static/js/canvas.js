@@ -905,6 +905,7 @@ function nodeEl(n) {
   if (n.type === 'sheet') bindSheet(el, n);
   if (n.type === 'save') bindSave(el, n);
   bindPreview(el, n);
+  bindPaintOverlay(el, n);
   applySpawn(el, n);
   return el;
 }
