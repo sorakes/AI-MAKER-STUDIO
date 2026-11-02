@@ -118,6 +118,28 @@
     </div>
   </div>
 </dialog>
+<dialog id="viewerDialog" class="viewer-dialog" role="dialog" aria-modal="true" aria-labelledby="viewerName" aria-describedby="viewerMeta">
+  <div class="viewer-wrap">
+    <div class="viewer-top">
+      <div class="viewer-title"><b id="viewerName"></b><small id="viewerMeta"></small></div>
+      <div class="viewer-tools">
+        <button class="btn small ghost" id="viewerPrev"><i data-ic="step-back"></i> Anterior</button>
+        <button class="btn small ghost" id="viewerNext">Próximo <i data-ic="step-forward"></i></button>
+        <button class="btn small ghost" id="viewerZoomOut" aria-label="Diminuir zoom">−</button>
+        <span class="viewer-zoom" id="viewerZoomLabel" aria-live="polite">Ajustar</span>
+        <button class="btn small ghost" id="viewerZoomIn"><i data-ic="zoom-in"></i> Ampliar</button>
+        <button class="btn small ghost" id="viewerFit"><i data-ic="fit"></i> Ajustar</button>
+        <label class="viewer-check"><input type="checkbox" id="viewerAutoplay"> <span>Reproduzir sozinho (mudo)</span></label>
+        <label class="viewer-check"><input type="checkbox" id="viewerLoop"> <span>Repetir</span></label>
+        <a class="btn small ghost" id="viewerDownload" href="#"><i data-ic="download"></i> Baixar</a>
+        <a class="btn small ghost" id="viewerOpen" href="#" target="_blank" rel="noopener"><i data-ic="external"></i> Abrir em nova aba</a>
+        <button class="btn small primary" id="viewerClose"><i data-ic="x"></i> Fechar</button>
+      </div>
+    </div>
+    <div class="viewer-stage" id="viewerStage"></div>
+    <p class="viewer-hint">← → navegar · Esc fechar · roda do mouse, pinça ou + − para zoom · duplo clique alterna ajustar/100%</p>
+  </div>
+</dialog>
 <dialog id="dzDialog" class="dz-dialog">
   <div class="dz-top">
     <div class="dz-title"><i data-ic="route"></i><div><small>Câmera e movimento · desenhe no frame</small><b id="dzTitle">Plano</b></div></div>
@@ -159,6 +181,7 @@
 <div id="uploadStatus" class="sr-only" role="status" aria-live="polite"></div>
 <script src="/js/icons.js"></script>
 <script src="/js/common.js"></script>
+<script src="/js/viewer.js"></script>
 <script src="/js/effects.js"></script>
 <script src="/js/canvas.js"></script>
 <script src="/js/direction.js"></script>
