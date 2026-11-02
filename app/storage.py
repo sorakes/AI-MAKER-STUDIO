@@ -2,7 +2,11 @@
 
 URLs públicas têm a forma /files/<id>/<pasta>/<arquivo> e só abrem para o dono (ou admin).
 """
+import base64
+import binascii
+import secrets
 import shutil
+import time
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -59,9 +63,53 @@ def kind_of(path: Path) -> str:
     return "video" if s in VIDEO_EXT else "audio" if s in AUDIO_EXT else "image" if s in IMAGE_EXT else "file"
 
 
+# Pasta oculta de trabalho (máscaras, quadros anotados, imagens temporárias dos editores de desenho).
+# Nunca aparece em Meus arquivos, não conta na cota e é apagada depois de TEMP_MAX_AGE_S.
+TEMP_DIR = "_tmp"
+TEMP_MAX_AGE_S = 24 * 3600
+TEMP_MAX_BYTES = 8 * 2**20
+IMAGE_MIME = {"data:image/png;base64,": ".png", "data:image/jpeg;base64,": ".jpg", "data:image/webp;base64,": ".webp"}
+
+
+def temp_file(uid: int, suffix: str) -> Path:
+    """Caminho novo dentro da pasta oculta do usuário (cria a pasta e limpa o que já venceu)."""
+    cleanup_temp(uid)
+    d = user_dir(uid, TEMP_DIR)
+    return d / f"{secrets.token_hex(6)}{suffix}"
+
+
+def save_temp_data_url(uid: int, data_url: str) -> Path:
+    """Imagem em data URL (PNG/JPEG/WEBP) gravada na pasta oculta. Valida tipo e tamanho."""
+    prefix = next((p for p in IMAGE_MIME if data_url.startswith(p)), None)
+    if not prefix:
+        raise HTTPException(400, "Imagem inválida (use PNG, JPEG ou WEBP)")
+    try:
+        raw = base64.b64decode(data_url[len(prefix):], validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(400, "Imagem inválida") from e
+    if len(raw) > TEMP_MAX_BYTES:
+        raise HTTPException(413, "Imagem grande demais")
+    path = temp_file(uid, IMAGE_MIME[prefix])
+    path.write_bytes(raw)
+    return path
+
+
+def cleanup_temp(uid: int, max_age_s: float = TEMP_MAX_AGE_S) -> int:
+    """Apaga arquivos da pasta oculta mais velhos que max_age_s. Devolve quantos foram removidos."""
+    d = USERS_DIR / str(uid) / TEMP_DIR
+    if not d.is_dir():
+        return 0
+    now, removed = time.time(), 0
+    for f in d.iterdir():
+        if f.is_file() and now - f.stat().st_mtime > max_age_s:
+            f.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
 def used_bytes(uid: int) -> int:
     d = USERS_DIR / str(uid)
-    return sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) if d.exists() else 0
+    return sum(f.stat().st_size for f in d.rglob("*") if f.is_file() and TEMP_DIR not in f.relative_to(d).parts) if d.exists() else 0
 
 
 def check_quota(user: dict, extra: int = 0):
@@ -80,8 +128,9 @@ def list_files(uid: int | None = None) -> list[dict]:
     for root in roots:
         if not root.exists():
             continue
+        cleanup_temp(int(root.name))
         for f in root.rglob("*"):
-            if not f.is_file() or f.name.endswith(DERIVED) or f.parent.name == "guides":
+            if not f.is_file() or f.name.endswith(DERIVED) or f.parent.name == "guides" or TEMP_DIR in f.relative_to(root).parts:
                 continue
             st = f.stat()
             if f.suffix.lower() == ".gif" and not f.with_name(f"{f.stem}_first.png").exists():

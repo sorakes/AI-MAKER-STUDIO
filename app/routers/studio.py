@@ -238,14 +238,12 @@ async def outpaint_image(req: outpaint.OutpaintRequest, user: dict = Depends(cur
     """Expandir: a IA preenche o quadro novo; a original volta por cima do próprio quadro (recomposição)."""
     await _image_source(req.source_url, user)
     src_path = storage.resolve(req.source_url, user)
-    tok = secrets.token_hex(4)
-    base = storage.user_dir(user["id"], "renders")
 
     def build():
         with Image.open(src_path) as im:
             src = im.convert("RGB")
         W, H, x, y = outpaint.layout(src.width, src.height, req.aspect, req.anchor)
-        canvas, keep = base / f"edit_{tok}_canvas.png", base / f"edit_{tok}_keep.png"
+        canvas, keep = storage.temp_file(user["id"], "_canvas.png"), storage.temp_file(user["id"], "_keep.png")
         outpaint.canvas_image(src, W, H, x, y).save(canvas)
         outpaint.keep_for_outpaint(W, H, x, y, src.width, src.height).save(keep)
         return W, H, x, y, canvas, keep
@@ -266,8 +264,6 @@ async def inpaint_image(req: outpaint.InpaintRequest, user: dict = Depends(curre
     await _image_source(req.source_url, user)
     src_path = storage.resolve(req.source_url, user)
     raw = _decode_mask(req.mask)
-    tok = secrets.token_hex(4)
-    base = storage.user_dir(user["id"], "renders")
 
     def build():
         with Image.open(src_path) as im:
@@ -276,7 +272,7 @@ async def inpaint_image(req: outpaint.InpaintRequest, user: dict = Depends(curre
             m = mk.convert("L").resize(src.size).point(lambda v: 255 if v > 127 else 0)
         if m.getbbox() is None:
             raise ValueError("Pinte a região que será editada")
-        marked, keep, mask = base / f"edit_{tok}_marked.png", base / f"edit_{tok}_keep.png", base / f"edit_{tok}_mask.png"
+        marked, keep, mask = (storage.temp_file(user["id"], f"_{k}.png") for k in ("marked", "keep", "mask"))  # pasta oculta
         outpaint.marked_image(src, m).save(marked)
         outpaint.keep_for_inpaint(m).save(keep)
         m.save(mask)
@@ -352,7 +348,7 @@ async def _performance_frame(url: str, user: dict, aspect: str) -> str:
     size = await asyncio.to_thread(upscale.image_size, path)
     if not performance.needs_fit(size, aspect):
         return url
-    dest = storage.user_dir(user["id"], "renders") / f"perf_frame_{secrets.token_hex(4)}.png"
+    dest = storage.temp_file(user["id"], "_perf_frame.png")  # quadro de trabalho: pasta oculta
     await asyncio.to_thread(performance.fit_frame, path, aspect, dest)
     return storage.to_url(dest)
 
@@ -548,6 +544,8 @@ async def plan_transition(req: transitions.PlanRequest, user: dict = Depends(nee
 
 @router.post("/render")
 async def render(req: jobs.RenderRequest, user: dict = Depends(current_user)):
+    if req.direction_image_url and req.direction_image_url.startswith("data:"):  # desenho guardado no node -> arquivo oculto
+        req.direction_image_url = storage.to_url(await asyncio.to_thread(storage.save_temp_data_url, user["id"], req.direction_image_url))
     job = await asyncio.to_thread(jobs.prepare, user, req)  # checagens e banco fora do loop
     jobs.start(job, user)
     return _tok_job(job, await groups.atoken_rate())
