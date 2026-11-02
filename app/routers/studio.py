@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, audio, camera, db, performance, videoedit, extend, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, audio, camera, db, performance, videoedit, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -385,37 +385,11 @@ async def performance_run(req: performance.PerformanceRequest, user: dict = Depe
     return await _performance_job(user, req, m, await _audio_seconds(req.audio_url, user))
 
 
-@router.post("/video/extend")
-async def extend_video(req: extend.ExtendRequest, user: dict = Depends(current_user)):
-    """Estender: último frame do clipe -> continuação com IA (modelo com quadro inicial) -> une com o original."""
-    src = await _video_source(req.source_url, user)
-    if not extend.pick(user, req.model):
-        raise HTTPException(400, extend.NO_START_MSG)
-    last = await asyncio.to_thread(media.extract_frame, src["path"], True)
-    prompt = extend.extend_prompt(req)
-    return await _image_job(user, jobs.RenderRequest(
-        node_id=req.node_id, name=req.name, gen="video", model=req.model, prompt=prompt, keyframe_prompt=prompt,
-        start_image_url=storage.to_url(last), duration=float(req.seconds), aspect=await asyncio.to_thread(extend.aspect_of, src["path"]),
-        extend_source_url=req.source_url, extend_transition=req.transition, ref_image_urls=[]))
-
-
-@router.post("/video/loop")
-async def loop_video(req: extend.LoopRequest, user: dict = Depends(current_user)):
-    """Loop perfeito sem IA: ida e volta, ou crossfade final->início (ffmpeg)."""
-    src = await _video_source(req.source_url, user)
-    if req.mode == "crossfade" and req.seconds >= src["duration"] / 2:
-        raise HTTPException(400, "O crossfade precisa ser menor que a metade do clipe")
-    return await _image_job(user, jobs.RenderRequest(
-        node_id=req.node_id, name=req.name, gen="loop", prompt="loop", keyframe_prompt="loop",
-        duration=float(src["duration"]), ref_image_urls=[req.source_url],
-        local_op={"kind": "loop", "mode": req.mode, "seconds": req.seconds}))
-
-
 @router.post("/video/transcribe")
 async def transcribe_video(req: subtitles.TranscribeRequest, user: dict = Depends(current_user)):
     """Transcrição do áudio do vídeo (modelo de áudio barato). O resultado (segmentos) fica no job."""
     src = await _video_source(req.source_url, user)
-    if not await asyncio.to_thread(extend.has_audio, src["path"]):
+    if not await asyncio.to_thread(media.has_audio, src["path"]):
         raise HTTPException(400, "O vídeo não tem trilha de áudio para transcrever")
     return await _image_job(user, jobs.RenderRequest(
         node_id=req.node_id, name=req.name, gen="transcribe", prompt="transcribe", keyframe_prompt="transcribe",

@@ -110,3 +110,10 @@ def data_url(path: Path, max_side: int = 2048) -> str:
         img.save(buf, "JPEG", quality=92)
         raw, mime = buf.getvalue(), "image/jpeg"
     return f"data:{mime};base64,{base64.b64encode(raw).decode()}"
+
+
+def has_audio(path: Path) -> bool:
+    """O arquivo tem trilha de áudio? (ffprobe)"""
+    out = subprocess.run([_ff("ffprobe"), "-v", "error", "-show_entries", "stream=codec_type", "-of", "json", str(path)],
+                         capture_output=True, text=True, timeout=30)
+    return any(s.get("codec_type") == "audio" for s in json.loads(out.stdout or "{}").get("streams", []))

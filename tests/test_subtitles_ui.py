@@ -13,7 +13,7 @@ def _text(path):
 def _subs_section():
     src = _text(JS / "canvas.js")
     start = src.index("// ---------------- Legendas")
-    return src[start:src.index("// ---------------- Estender vídeo / loop perfeito")]
+    return src[start:src.index("// ----------------", start + 10)]  # até a próxima seção
 
 
 def test_subs_node_is_in_palette_of_video_workspace_and_has_kind():
@@ -41,7 +41,7 @@ def test_subs_editor_controls_have_accessible_names():
 
 def test_no_inline_styles_in_the_subs_code():
     assert "style=\"" not in _subs_section()
-    assert "style=\"" not in _text(JS / "canvas.js").split("// ---------------- Legendas")[1].split("// ---------------- Estender")[0]
+    assert "style=\"" not in _text(JS / "canvas.js").split("// ---------------- Legendas")[1].split("// ----------------")[0]
 
 
 def test_subs_parser_accepts_srt_and_vtt_shapes():

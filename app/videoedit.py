@@ -17,7 +17,7 @@ from typing import Literal
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from . import extend, media, montage, storage
+from . import media, montage, storage
 
 MAX_SECONDS = 10.0
 MIN_FRAMES, MAX_FRAMES = 2, 6
@@ -142,7 +142,7 @@ def run(src: Path, op: dict, dest: Path, edit_frame) -> float:
     if end < info["duration"] - 0.05:
         items.append({"type": "clip", "path": src, "start": end, "end": info["duration"]})
     audio_path = None
-    if op.get("preserve_audio", True) and extend.has_audio(src):
+    if op.get("preserve_audio", True) and media.has_audio(src):
         audio_path = work / "audio.mp3"
         _extract_audio(src, audio_path)
     aspect = "16:9" if size[0] >= size[1] else "9:16"
