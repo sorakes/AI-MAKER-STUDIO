@@ -227,7 +227,7 @@ def backfill_costs():
 
 
 def build_or_video_input(m: dict, *, prompt: str, start: str | None, end: str | None, refs: list[str],
-                         aspect: str, duration: float, quality: str, seed: int | None) -> dict:
+                         aspect: str, duration: float, quality: str, seed: int | None, generate_audio: bool = False) -> dict:
     f = m["fields"]
     durs = m["caps"].get("durations") or []
     body = {"model": m["model_id"], "prompt": prompt}
@@ -261,6 +261,8 @@ def build_or_video_input(m: dict, *, prompt: str, start: str | None, end: str | 
         body["input_references"] = [{"type": "image_url", "image_url": {"url": u}} for u in refs]
     if m["caps"].get("audio"):
         body["generate_audio"] = False  # áudio vem da montagem; o admin liga em params
+    if generate_audio and m["caps"].get("audio"):
+        body["generate_audio"] = True  # performance: o próprio modelo fala o texto (com voz e boca)
     if seed is not None and f.get("seed"):
         body["seed"] = seed
     body.update(m["params"] or {})
