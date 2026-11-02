@@ -54,3 +54,12 @@ def test_beta_texts_are_translated():
     es = _text(JS / "i18n-es.js")
     assert '"Recurso em beta"' in en and '"Recurso em beta: pode mudar ou falhar"' in en
     assert '"Beta feature"' in es and '"Beta feature: it may change or fail"' in es
+
+
+def test_beta_badge_is_compact_pill_everywhere():
+    """O selo nunca estica (flex em coluna/grid) e fica ao lado do rótulo do nó, não numa linha própria."""
+    css = _text(STATIC / "css" / "studio.css")
+    assert re.search(r"\.beta-tag \{[^}]*flex: none;[^}]*width: fit-content;", css)
+    assert ".btn.primary .beta-tag {" in css
+    src = _text(JS / "canvas.js")
+    assert "<small>${k.label}${BETA_TYPES.includes(n.type) ? betaTag() : ''}</small>" in src

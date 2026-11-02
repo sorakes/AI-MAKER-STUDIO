@@ -901,7 +901,7 @@ function nodeEl(n) {
   el.innerHTML = `
     <div class="cv-head">
       <span class="cv-kicon">${ic(k.icon)}</span>
-      <div class="cv-htext"><small>${k.label}</small>${BETA_TYPES.includes(n.type) ? betaTag() : ''}<span class="title" spellcheck="false" title="Duplo clique para renomear">${esc(n.name)}</span></div>
+      <div class="cv-htext"><small>${k.label}${BETA_TYPES.includes(n.type) ? betaTag() : ''}</small><span class="title" spellcheck="false" title="Duplo clique para renomear">${esc(n.name)}</span></div>
       <span class="cv-dot ${n.status || 'idle'}" title="${esc(n.status || 'pronto para gerar')}"></span>
       ${canRegen ? `<button class="cv-hbtn" data-act="regen" title="Regerar (nova variação)" aria-label="Regerar (nova variação)">${ic('refresh')}</button>` : ''}
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
