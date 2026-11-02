@@ -1106,3 +1106,20 @@ html.i18n-wait body { visibility: hidden; }
 .cv-node .cv-preview { max-width: 100%; }
 .cv-node .aud-tabs { min-width: 0; flex-wrap: wrap; }
 .cv-node .aud-tab { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Visual: paleta e cabeçalhos sem vazamento (título em 1 linha com reticências; descrição limitada) */
+.cv-pal { min-width: 0; overflow: hidden; }
+.cv-pal-head { min-width: 0; }
+.cv-pal-head b { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-pal-head small { min-width: 0; flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-pal-head .beta-tag { flex-shrink: 0; }
+.cv-pal p { min-width: 0; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.cv-pal details p { overflow-wrap: anywhere; display: block; -webkit-line-clamp: unset; }
+.cv-pal-icon { flex-shrink: 0; }
+
+/* Checkbox dentro de label: linha única, alinhada à esquerda, selo BETA ao lado do texto */
+label:has(> input[type=checkbox]) { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 6px; text-align: left; }
+label:has(> input[type=checkbox]) > input[type=checkbox] { flex-shrink: 0; margin: 0; }
+label:has(> input[type=checkbox]) > span { min-width: 0; }
+.beta-tag { vertical-align: middle; }
+.vedit-check, .audio-toggle { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 6px; }

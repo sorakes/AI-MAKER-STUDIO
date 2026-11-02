@@ -525,7 +525,7 @@ const nodeAllowed = (key) => !key || state.me?.permissions?.[`node_${key}`] !== 
 function renderPalette() {
   $('#cvPalette').innerHTML = Object.entries(PALETTE).filter(([k]) => WS_PALETTE[cv.ws].includes(k) && nodeAllowed(k)).map(([k, p]) => `
     <div class="cv-pal" draggable="true" data-node="${k}">
-      <div class="cv-pal-head"><span class="cv-pal-icon">${ic(p.icon)}</span><b>${esc(p.title)}</b>${p.beta ? betaTag() : ''}<small>${esc(p.tag)}</small></div>
+      <div class="cv-pal-head"><span class="cv-pal-icon">${ic(p.icon)}</span><b title="${esc(p.title)}">${esc(p.title)}</b>${p.beta ? betaTag() : ''}<small>${esc(p.tag)}</small></div>
       <p>${esc(p.what)}</p>
       <details><summary>Como usar</summary><p>${esc(p.how)}</p></details>
     </div>`).join('') + `
