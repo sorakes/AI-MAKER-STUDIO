@@ -221,15 +221,25 @@ function pruneRemovedNodes(d) {
   return gone.size;
 }
 
-// Nós com o mesmo jobId são cópias de um só job: fica o primeiro, as ligações dos outros passam a ele (sem repetir).
+// Chave de um nó que é cópia de um job: o jobId, ou o nome-base do arquivo de mídia (job-X_N, sem extensão),
+// assim o .jpg bruto e o .png final do mesmo job viram um só nó.
+function jobKeyOf(n) {
+  if (n.jobId) return `job:${n.jobId}`;
+  const url = n.type === 'media' ? n.media?.url : null;
+  const m = url && /\/(job-[0-9a-f]+_\d+)\.\w+$/.exec(url);
+  return m ? `file:${m[1]}` : null;
+}
+
+// Nós que são cópias de um mesmo job viram um: fica o primeiro, as ligações dos outros passam a ele (sem repetir).
 // Devolve quantos nós foram mesclados.
 function dedupeJobNodes(d) {
   const first = new Map();
   const drop = new Map();  // id do nó repetido -> id do que fica
   for (const n of d.nodes) {
-    if (!n.jobId) continue;
-    if (!first.has(n.jobId)) first.set(n.jobId, n.id);
-    else drop.set(n.id, first.get(n.jobId));
+    const key = jobKeyOf(n);
+    if (!key) continue;
+    if (!first.has(key)) first.set(key, n.id);
+    else drop.set(n.id, first.get(key));
   }
   if (!drop.size) return 0;
   const seen = new Set();

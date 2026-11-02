@@ -271,7 +271,10 @@ def burn(video: Path, op: dict, dest: Path) -> Path:
     srt.write_text(to_srt(segs), encoding="utf-8")
     cmd = [media._ff("ffmpeg"), "-y", "-i", str(video), "-vf", f"ass={ass.name}",
            "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "copy", dest.name]
-    done = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(dest.parent))
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(dest.parent))
+    finally:
+        ass.unlink(missing_ok=True)  # o .ass é só o intermediário do ffmpeg: não fica em renders
     if done.returncode != 0:
         dest.unlink(missing_ok=True)
         raise RuntimeError(done.stderr[-600:])

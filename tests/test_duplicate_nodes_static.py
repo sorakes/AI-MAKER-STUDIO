@@ -33,3 +33,8 @@ def test_both_edit_routes_go_through_the_server_dedupe():
     router = _read("app/routers/studio.py")
     assert 'idempotency.once(idempotency.key_for(user["id"], "inpaint"' in router
     assert 'idempotency.once(idempotency.key_for(user["id"], "outpaint"' in router
+
+
+def test_media_nodes_of_the_same_job_file_merge_across_extensions():
+    src = _read("static/js/canvas.js")
+    assert "function jobKeyOf(n)" in src and "file:${m[1]}" in src  # .jpg bruto e .png final: mesmo job

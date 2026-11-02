@@ -367,10 +367,27 @@ async def _or_video(job: dict, st: dict, m: dict, i: int, n: int, prompt: str, s
             job["progress"] = int((i + 0.05 + min(0.9, run / 150)) / n * 100)
 
 
-def _store(job: dict, idx: int, url: str, kind: str) -> str:
+def _store(job: dict, idx: int, url: str, kind: str, hidden: bool = False) -> str:
+    """Baixa o resultado do provedor. hidden: é o bruto de um job com pós-processamento; fica na pasta oculta
+    (fora de renders, da biblioteca e da cota) até o resultado final ser publicado."""
     data = providers.download(url)
-    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{idx}{_ext(url, kind)}"
+    ext = _ext(url, kind)
+    if hidden:
+        dest = storage.temp_file(job["user_id"], f"_{job['id']}_{idx}_raw{ext}")
+    else:
+        dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{idx}{ext}"
     dest.write_bytes(data)
+    return storage.to_url(dest)
+
+
+def _publish(job: dict, idx: int, temp_url: str, raw):
+    """Leva o resultado final (já processado) para renders e apaga o bruto que ficou na pasta oculta.
+    Um job = um arquivo em renders."""
+    final = storage.resolve(temp_url)
+    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{idx}{final.suffix}"
+    shutil.move(str(final), str(dest))
+    if raw is not None and raw.exists() and raw != final:
+        raw.unlink()
     return storage.to_url(dest)
 
 
@@ -449,9 +466,12 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 elif spec.gen == "transcribe":  # áudio do vídeo -> WAV -> modelo de áudio -> segmentos (guardados no job)
                     job["detail"] = "transcrevendo o áudio"
                     video = storage.resolve(spec.ref_image_urls[0], user)
-                    wav = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_audio.wav"
-                    await asyncio.to_thread(subtitles.wav_from_video, video, wav)
-                    job["result"] = await asyncio.to_thread(subtitles.transcribe_wav, wav, spec.local_op.get("language", ""))
+                    wav = storage.temp_file(job["user_id"], f"_{job['id']}_audio.wav")  # intermediário: pasta oculta
+                    try:
+                        await asyncio.to_thread(subtitles.wav_from_video, video, wav)
+                        job["result"] = await asyncio.to_thread(subtitles.transcribe_wav, wav, spec.local_op.get("language", ""))
+                    finally:
+                        wav.unlink(missing_ok=True)
                     cost = registry.estimate(m, 1)
                     st["output"], url = None, None
                 elif spec.gen == "lipsync" and m["provider"] == "openrouter":  # lip sync real (gancho do provedor)
@@ -492,7 +512,10 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     raise RuntimeError(f"provedor {m['provider']} não é mais suportado")
                 if url:
                     job["detail"] = "baixando resultado"
-                    st["output"] = await asyncio.to_thread(_store, job, i, url, st["kind"])
+                    # com pós-processamento (tamanho ou recomposição) o bruto fica na pasta oculta; só o final vai a renders
+                    post = bool(spec.composite or spec.target_size or spec.upscale_factor)
+                    st["output"] = await asyncio.to_thread(_store, job, i, url, st["kind"], post)
+                    hidden_raw = storage.resolve(st["output"]) if post else None
                     if spec.target_size:  # IA devolve tamanho próprio: leva exatamente ao tamanho do original (× fator)
                         job["detail"] = "ajustando ao tamanho final"
                         await asyncio.to_thread(upscale.resize_to, storage.resolve(st["output"]), tuple(spec.target_size))
@@ -527,6 +550,8 @@ async def _run(job: dict, user: dict, resume: bool = False):
                                                            storage.resolve(c["original_url"], user), storage.resolve(c["keep_mask_url"], user),
                                                            tuple(c["size"]), storage.resolve(st["output"]))
                         st["output"] = storage.to_url(composed)
+                    if post:  # resultado final em renders; o bruto (pasta oculta) é apagado aqui
+                        st["output"] = await asyncio.to_thread(_publish, job, i, st["output"], hidden_raw)
             except Exception as e:
                 await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], status="error",
                           detail={"job": job["id"], "error": str(e)[:400]})
