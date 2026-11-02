@@ -206,3 +206,44 @@ def test_sfx_job_needs_no_provider(login, make_user, no_ai, monkeypatch):
     job = started[0]
     assert job["status"] == "done", job.get("error")
     assert job["steps"][0]["cost"] == 0.0 and abs(job["media"]["duration"] - 2.0) < 0.15
+
+
+# ---------- parser do stream real (sem rede): o caminho que o provedor usa de verdade ----------
+
+class _FakeStream:
+    def __init__(self, lines):
+        self._lines = lines
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __iter__(self):
+        return iter(self._lines)
+
+
+def test_openrouter_audio_parses_the_streamed_sse_chunks(monkeypatch):
+    chunk1 = base64.b64encode(b"\x01\x02\x03\x04").decode()
+    chunk2 = base64.b64encode(b"\x05\x06").decode()
+    lines = [
+        f'data: {{"choices":[{{"delta":{{"audio":{{"data":"{chunk1}"}}}}}}]}}\n'.encode(),
+        f'data: {{"choices":[{{"delta":{{"audio":{{"data":"{chunk2}","transcript":"oi"}}}}}}]}}\n'.encode(),
+        b'data: {"choices":[],"usage":{"cost":0.000297}}\n',
+        b"data: [DONE]\n",
+    ]
+    monkeypatch.setattr(providers, "get_key", lambda *a, **k: "chave-de-teste")
+    monkeypatch.setattr(providers.urllib.request, "urlopen", lambda req, timeout=None: _FakeStream(lines))
+    data, text, cost = providers.openrouter_audio(audio.SPEECH_MODEL, audio.speech_messages("oi"),
+                                                  audio={"voice": "alloy", "format": "pcm16"})
+    assert data == b"\x01\x02\x03\x04\x05\x06"  # os pedaços base64 são juntados e decodificados
+    assert text == "oi" and cost == 0.000297
+
+
+def test_openrouter_audio_reports_an_error_event_as_provider_error(monkeypatch):
+    monkeypatch.setattr(providers, "get_key", lambda *a, **k: "chave-de-teste")
+    monkeypatch.setattr(providers.urllib.request, "urlopen",
+                        lambda req, timeout=None: _FakeStream([b'data: {"error":{"message":"limite excedido"}}\n']))
+    with pytest.raises(providers.ProviderError, match="limite excedido"):
+        providers.openrouter_audio(audio.MUSIC_MODEL, [{"role": "user", "content": "x"}])
