@@ -89,7 +89,7 @@ def test_text_without_voice_is_rejected_with_a_clear_message(login, make_user, n
     c, u = _client(login, make_user)
     me = auth.public_user(u)
     r = c.post("/api/video/lipsync", json={"image_url": _mine_image(me), "script": "Olá, tudo bem?"})
-    assert r.status_code == 400 and "Sem voz" in r.json()["detail"]
+    assert r.status_code == 400 and "Sem lip sync real" in r.json()["detail"]  # sem modelo real: pede o áudio
 
 
 def test_request_needs_audio_or_script(login, make_user, no_ai):

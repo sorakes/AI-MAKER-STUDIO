@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, audio, camera, db, videoedit, extend, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, audio, camera, db, performance, videoedit, extend, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -307,11 +307,12 @@ async def lipsync_video(req: lipsync.LipSyncRequest, user: dict = Depends(curren
     else:
         if not req.script.strip():
             raise HTTPException(400, "Envie um áudio ou escreva o texto da fala")
-        try:
-            await asyncio.to_thread(lipsync.synthesize, req.script, req.voice)
-        except providers.ProviderError as e:
-            raise HTTPException(400, str(e)) from e
-        raise HTTPException(400, "Sem voz (TTS) configurada: envie um áudio")
+        m = performance.find_model(registry.for_user(user, "video"))  # único caminho real: o modelo fala o texto
+        if not m:
+            raise HTTPException(400, "Sem lip sync real hoje: envie um áudio para a animação simples")
+        aspect = req.aspect if req.aspect in ("16:9", "9:16", "1:1") else "16:9"
+        return await _performance_job(user, performance.PerformanceRequest(
+            node_id=req.node_id, name=req.name, image_url=req.image_url, text=req.script, aspect=aspect), m)
     prompt = (f"Animate the portrait so the person speaks the audio with natural lip movement and small head motion. "
               f"Keep the face, clothes and background identical. {req.script.strip()}").strip()
     return await _image_job(user, jobs.RenderRequest(
@@ -330,6 +331,50 @@ async def _video_source(url: str, user: dict) -> dict:
     if not info.get("duration") or not info.get("width"):
         raise HTTPException(400, "Arquivo de entrada não é um vídeo")
     return {"path": path, **info}
+
+
+async def _audio_seconds(url: str | None, user: dict) -> float | None:
+    """Duração do áudio ligado (ffprobe). Só mede: o modelo de performance não recebe o áudio."""
+    if not url:
+        return None
+    try:
+        info = await asyncio.to_thread(lipsync.audio_info, storage.resolve(url, user))
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if info["duration"] > performance.MAX_SECONDS:
+        raise HTTPException(400, f"O áudio passa de {performance.MAX_SECONDS} s")
+    return info["duration"]
+
+
+async def _performance_job(user: dict, req: performance.PerformanceRequest, m: dict,
+                           audio_seconds: float | None = None) -> dict:
+    prompt = performance.prompt_for(req)
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="video", model=m["id"], prompt=prompt, keyframe_prompt=prompt,
+        aspect=req.aspect, duration=performance.seconds_for(req.text, audio_seconds), quality="draft",
+        start_image_url=req.image_url, ref_image_urls=[], generate_audio=True))
+
+
+@router.post("/video/performance/quote")
+async def performance_quote(req: performance.PerformanceRequest, user: dict = Depends(current_user)):
+    """Estimativa antes de gerar: duração e custo em US$ (confirmação acima de US$ 0,25)."""
+    await _image_source(req.image_url, user)
+    m = performance.find_model(registry.for_user(user, "video"))
+    if not m:
+        raise HTTPException(400, "Modelo de performance indisponível para o seu grupo")
+    seconds = performance.seconds_for(req.text, await _audio_seconds(req.audio_url, user))
+    usd = registry.estimate(m, seconds)
+    return {"seconds": seconds, "usd": usd, "confirm": usd > 0.25, "tokens_per_usd": await groups.atoken_rate()}
+
+
+@router.post("/video/performance")
+async def performance_run(req: performance.PerformanceRequest, user: dict = Depends(current_user)):
+    """Personagem falando com expressão: imagem + texto (+ áudio opcional para a duração). Cota, fila e versões."""
+    await _image_source(req.image_url, user)
+    m = performance.find_model(registry.for_user(user, "video"))
+    if not m:
+        raise HTTPException(400, "Modelo de performance indisponível para o seu grupo")
+    return await _performance_job(user, req, m, await _audio_seconds(req.audio_url, user))
 
 
 @router.post("/video/extend")

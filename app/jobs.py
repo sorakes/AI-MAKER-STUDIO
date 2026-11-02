@@ -32,6 +32,7 @@ class RenderRequest(BaseModel):
     start_mode: str = "auto"           # auto | still | text
     prompt: str
     keyframe_prompt: str | None = None
+    generate_audio: bool = False       # performance: o modelo de vídeo gera a fala (voz e boca)
     negative: str = ""
     aspect: str = "16:9"
     duration: float = 5
@@ -327,7 +328,8 @@ async def _or_video(job: dict, st: dict, m: dict, i: int, n: int, prompt: str, s
             m, prompt=prompt, start=await asyncio.to_thread(as_data, prev_image),
             end=await asyncio.to_thread(as_data, spec.end_image_url),
             refs=await asyncio.to_thread(lambda: [as_data(u) for u in ref_urls[:max(1, m["caps"].get("max_refs") or 4)]]),
-            aspect=spec.aspect, duration=spec.duration, quality=spec.quality, seed=spec.seed)
+            aspect=spec.aspect, duration=spec.duration, quality=spec.quality, seed=spec.seed,
+            generate_audio=spec.generate_audio)
         st["handle"] = await asyncio.to_thread(providers.or_video_submit, body, m.get("key_id"))
         st["started"] = time.time()
         await asave(job)

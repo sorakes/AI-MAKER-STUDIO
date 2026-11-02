@@ -43,9 +43,9 @@ def test_sound_effect_is_labelled_as_synthesized_not_recorded():
 
 def test_voice_text_becomes_audio_before_speak_animates():
     canvas = _text(JS / "canvas.js")
-    run = canvas.split("async function runSpeak")[1]
-    assert run.index("speechForSpeak(n)") < run.index("/api/video/lipsync")  # TTS antes da animação
-    assert "return watchJob(n)" in run[:1800]
+    run = canvas.split("async function runSpeak")[1].split("async function startSpeakJob")[0]
+    assert run.index("speechForSpeak(n)") < run.index("startSpeakJob(n, src, n.audio")  # TTS antes da animação
+    assert "/api/video/lipsync" in canvas.split("async function startSpeakJob")[1][:900]
     assert '<select data-k="voice">' in canvas  # voz da Fala habilitada (antes: "Sem provedor de voz", desabilitada)
 
 

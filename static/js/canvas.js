@@ -8,7 +8,7 @@ const cv = { nodes: [], edges: [], pan: { x: 60, y: 40 }, zoom: 0.9, sel: null, 
 
 // Cada área tem o próprio canvas e a própria paleta de nós.
 const WS_PALETTE = {
-  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'extend', 'subs', 'audio', 'videoedit', 'review', 'montage'],
+  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'extend', 'subs', 'audio', 'videoedit', 'performance', 'review', 'montage'],
   character: ['chargen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
   product: ['prodgen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
 };
@@ -467,6 +467,12 @@ const PALETTE = {
     how: 'Ligue o vídeo na entrada → escreva o que mudar ou escolha um preset → ajuste início e fim → Ver custo → Editar trecho.',
     make: (pos) => newVideoEdit(pos),
   },
+  performance: {
+    icon: 'user', title: 'Performance', tag: 'imagem → personagem falando',
+    what: 'O personagem da imagem fala um texto com expressão e movimento. O modelo gera a fala e a boca com voz própria.',
+    how: 'Ligue a imagem do personagem na entrada I → escreva a fala → escolha o formato → Ver custo → Gerar performance.',
+    make: (pos) => newPerformance(pos),
+  },
   edit: {
     icon: 'sparkles', title: 'Expandir / editar região', tag: 'quadro maior ou região trocada',
     what: 'Expande a imagem para outro aspecto (a IA preenche as bordas) ou troca uma região pintada, mantendo o resto igual.',
@@ -562,7 +568,7 @@ function frameOf(n) {
   if (n.type === 'transition') return n.output?.last_frame || null;
   if (n.type === 'frame') return extractedFrame(n);
   if (['upscale', 'relight', 'edit'].includes(n.type)) return n.output?.url || null;
-  if (n.type === 'speak' || n.type === 'extend' || n.type === 'subs' || n.type === 'videoedit') return n.output?.last_frame || null;
+  if (n.type === 'speak' || n.type === 'extend' || n.type === 'subs' || n.type === 'videoedit' || n.type === 'performance') return n.output?.last_frame || null;
   if (n.type === 'review') return frameOf(incoming(n.id)[0]);
   if (n.type === 'media') return n.media.kind === 'video' ? n.media.last_frame : n.media.url;
   if (n.type === 'shot') return n.output?.last_frame || (n.output?.kind === 'image' ? n.output.url : null);
@@ -574,7 +580,7 @@ function frameOf(n) {
 function videoOf(n) {
   if (n?.type === 'review') return videoOf(incoming(n.id)[0]);
   if (n?.type === 'media' && n.media.kind === 'video') return n.media.url;
-  if (n?.type === 'shot' || n?.type === 'transition' || n?.type === 'extend' || n?.type === 'subs' || n?.type === 'videoedit') return n.output?.kind === 'video' ? n.output.url : null;
+  if (n?.type === 'shot' || n?.type === 'transition' || n?.type === 'extend' || n?.type === 'subs' || n?.type === 'videoedit' || n?.type === 'performance') return n.output?.kind === 'video' ? n.output.url : null;
   return null;
 }
 
@@ -828,6 +834,7 @@ const KIND = {
   subs: { label: 'Legendas', icon: 'film' },
   audio: { label: 'Áudio', icon: 'music' },
   videoedit: { label: 'Editar vídeo', icon: 'video' },
+  performance: { label: 'Performance', icon: 'user' },
 };
 
 function nodeEl(n) {
@@ -851,7 +858,7 @@ function nodeEl(n) {
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
       <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
-    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, subs: subsBody, audio: audioBody, videoedit: videoEditBody, extend: extendBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
+    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, subs: subsBody, audio: audioBody, videoedit: videoEditBody, performance: performanceBody, extend: extendBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
       ? '<span class="cv-port in" data-port="a" title="Entrada A: vídeo ou imagem de onde a transição sai"><i>A</i></span><span class="cv-port in port-b" data-port="b" title="Entrada B: vídeo ou imagem onde a transição chega"><i>B</i></span>'
       : n.type === 'speak'
@@ -888,6 +895,7 @@ function nodeEl(n) {
   if (n.type === 'subs') bindSubs(el, n);
   if (n.type === 'audio') bindAudio(el, n);
   if (n.type === 'videoedit') bindVideoEdit(el, n);
+  if (n.type === 'performance') bindPerformance(el, n);
   if (n.type === 'extend') bindExtend(el, n);
   if (n.type === 'review') bindReview(el, n);
   if (n.type === 'brief') bindBrief(el, n);
@@ -1092,7 +1100,7 @@ function newSpeak(pos) {
 
 const speakModeNote = (n) => (n.speakMode === 'local'
   ? 'sem lip sync real, animação simples'
-  : n.speakMode === 'ai' ? 'Fala com IA: lip sync do modelo escolhido.'
+  : n.speakMode === 'ai' ? 'Modelo real: fala o texto com voz própria (não sincroniza ao áudio enviado).'
     : 'Sem lip sync real hoje: o resultado é uma animação simples com o áudio.');
 
 function speakBody(n) {
@@ -1148,7 +1156,12 @@ async function runSpeak(n) {
   if (!src) return toast('Ligue a imagem do personagem na entrada I');
   if (!n.audio && !(n.script || '').trim()) return toast('Envie um áudio ou escreva o texto');
   if (n.status === 'running') return;
-  if (!n.audio) {  // texto sem áudio: gera a voz (TTS) antes de animar
+  if (!n.audio) {
+    // texto sem áudio: primeiro o modelo real, que fala o texto (sem áudio enviado)
+    try { return await startSpeakJob(n, src, null); } catch (err) {
+      if (!/Sem lip sync real/.test(err.message)) throw err;  // sem modelo real: cai no caminho abaixo
+    }
+    // fallback: gera a voz (TTS) e anima com a trilha
     Object.assign(n, { status: 'running', stage: 'gerando a voz', error: null });
     renderNode(n);
     try { const m = await speechForSpeak(n); n.audio = { url: m.url, name: 'voz (TTS)', duration: m.duration }; } catch (err) {
@@ -1158,11 +1171,17 @@ async function runSpeak(n) {
     }
     save();
   }
+  return startSpeakJob(n, src, n.audio?.url || null);
+}
+
+// Um único caminho para a Fala: o servidor decide (modelo real com texto, ou animação simples com o áudio).
+async function startSpeakJob(n, src, audioUrl) {
   let job;
   try {
-    job = await api('/api/video/lipsync', { node_id: n.id, name: n.name, image_url: src, audio_url: n.audio?.url || null,
+    job = await api('/api/video/lipsync', { node_id: n.id, name: n.name, image_url: src, audio_url: audioUrl,
       script: n.script || '', voice: null, aspect: n.aspect, model: n.model || 'auto' });
   } catch (err) {
+    if (!audioUrl && /Sem lip sync real/.test(err.message)) throw err;  // o chamador decide o fallback
     Object.assign(n, { status: 'error', error: err.message });
     renderNode(n);
     throw err;
