@@ -41,13 +41,21 @@ function performanceBody(n) {
     </div>`;
 }
 
+// Botões do node Performance sem recriar o DOM (mantém o foco no campo de texto).
+function syncPerformanceButtons(el, n) {
+  const off = n.status === 'running' || !upscaleSource(n) || !n.text.trim();
+  el.querySelector('[data-act=perf-quote]')?.toggleAttribute('disabled', off);
+  el.querySelector('[data-act=perf-run]')?.toggleAttribute('disabled', off);
+}
+
 function bindPerformance(el, n) {
   el.querySelectorAll('[data-k]').forEach((inp) => {
     const ev = inp.tagName === 'TEXTAREA' || inp.type === 'text' ? 'input' : 'change';
     inp.addEventListener(ev, () => {
       n[inp.dataset.k] = inp.value;
       save();
-      if (inp.dataset.k === 'text') renderNode(n);
+      if (inp.tagName === 'SELECT') renderNode(n);  // seletor reconstrói; campos de texto só atualizam os botões
+      else syncPerformanceButtons(el, n);
     });
   });
   el.querySelector('[data-act=perf-quote]')?.addEventListener('click', () => quotePerformance(n).catch((err) => toast(err.message)));
