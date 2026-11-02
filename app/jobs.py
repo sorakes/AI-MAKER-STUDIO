@@ -17,7 +17,7 @@ import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from . import db, media, promptgen, providers, registry, storage, upscale, usage
+from . import db, media, promptgen, providers, registry, relight, storage, upscale, usage
 from .auth import CURRENT, public_user
 
 JOBS: dict[str, dict] = {}
@@ -45,6 +45,7 @@ class RenderRequest(BaseModel):
     compose: bool = False              # 1º frame conectado + elenco: gera antes um 1º frame com o elenco na cena
     direction_image_url: str | None = None  # desenho da câmera/elementos sobre o 1º frame (referência do vídeo)
     upscale_factor: int = 0  # gen=upscale: fator final (2 ou 4); a saída da IA é levada a esse tamanho
+    local_op: dict = Field(default_factory=dict)  # gen=relight/style: operação do ajuste local (Pillow)
 
 
 def _step(kind: str, m: dict, label: str) -> dict:
@@ -57,6 +58,10 @@ def plan(user: dict, r: RenderRequest) -> list[dict]:
     if r.gen == "upscale":  # IA com referências se houver modelo; senão upscale simples local
         m = upscale.pick(user, r.model)
         return [_step("image", m or upscale.LOCAL, "Upscale criativo" if m else "Upscale simples")]
+    if r.gen in ("relight", "style"):  # IA com referências se houver modelo; senão ajuste local (Pillow)
+        m = relight.pick(user, r.model)
+        label = ("Relight" if r.gen == "relight" else "Estilo") + (" com IA" if m else " simples")
+        return [_step("image", m or relight.local_model(label), label)]
 
     def image_model(choice):
         m = None
@@ -408,10 +413,14 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     job["detail"] = "salvando vídeo"
                     st["output"] = await asyncio.to_thread(_store_bytes, job, i, data, ".mp4")
                     url = None
-                elif m["provider"] == "local":  # upscale simples: Pillow, sem provedor
+                elif m["provider"] == "local":  # upscale/relight/estilo simples: Pillow, sem provedor
                     src = storage.resolve(spec.ref_image_urls[0], user)
                     dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}.png"
-                    await asyncio.to_thread(upscale.resize_file, src, spec.upscale_factor, dest)
+                    if spec.gen == "upscale":
+                        await asyncio.to_thread(upscale.resize_file, src, spec.upscale_factor, dest)
+                    else:
+                        ref = storage.resolve(spec.ref_image_urls[1], user) if spec.gen == "style" else None
+                        await asyncio.to_thread(relight.apply_local, spec.local_op, src, dest, ref)
                     st["output"], cost, url = storage.to_url(dest), 0.0, None  # já gravado: nada a baixar
                 elif m["provider"] == "openrouter":
                     url, cost = await asyncio.to_thread(_openrouter_image, m, prompt, spec, step_refs)
