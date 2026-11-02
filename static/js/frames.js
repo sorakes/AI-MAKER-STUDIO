@@ -102,7 +102,7 @@ function bindStartPicker(el, n) {
 // ---------------- Nó Extrair frame ----------------
 
 function newFrameNode(pos) {
-  return { id: uid('frame'), type: 'frame', name: t('Frame extraído'), t: null, frame: null, src: null, ...pos };
+  return { id: uid('frame'), type: 'frame', name: 'Frame extraído', t: null, frame: null, src: null, ...pos };
 }
 
 // Saída do nó: o frame escolhido (se ainda for da mesma entrada) ou o último frame do vídeo.

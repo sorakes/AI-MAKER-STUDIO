@@ -10,7 +10,7 @@ const AUDIO_SFX = [['rain', 'Chuva'], ['wind', 'Vento'], ['whoosh', 'Whoosh'], [
 const AUDIO_VOICES = [['alloy', 'Alloy'], ['nova', 'Nova'], ['onyx', 'Onyx'], ['shimmer', 'Shimmer']];
 
 function newAudio(pos) {
-  return { id: uid('aud'), type: 'audio', name: t('Áudio'), tab: 'voice', text: '', voice: 'alloy', speed: 1,
+  return { id: uid('aud'), type: 'audio', name: 'Áudio', tab: 'voice', text: '', voice: 'alloy', speed: 1,
     genre: 'pop', mood: 'happy', musicPrompt: '', seconds: 10, sfxKind: 'rain', sfxSeconds: 3,
     status: 'idle', output: null, takes: [], jobId: null, error: null, ...pos };
 }

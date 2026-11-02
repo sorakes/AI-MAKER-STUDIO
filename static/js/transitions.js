@@ -31,7 +31,7 @@ function transitionLabel(t) {
 }
 
 function newTransition(pos) {
-  return { id: uid('trans'), type: 'transition', name: t('Transição'), mode: 'ai', editKind: 'dissolve', model: 'auto',
+  return { id: uid('trans'), type: 'transition', name: 'Transição', mode: 'ai', editKind: 'dissolve', model: 'auto',
     bridgeDur: 5, idea: '', cutAt: null, frame: null, bIn: null, bFrame: null, plan: null, ...pos };
 }
 

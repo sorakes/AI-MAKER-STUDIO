@@ -5,7 +5,7 @@ const PERF_ASPECTS = [['16:9', '16:9'], ['9:16', '9:16'], ['1:1', '1:1']];
 const PERF_CONFIRM_USD = 0.25;
 
 function newPerformance(pos) {
-  return { id: uid('perf'), type: 'performance', name: t('Performance'), text: '', motion: '', aspect: '16:9',
+  return { id: uid('perf'), type: 'performance', name: 'Performance', text: '', motion: '', aspect: '16:9',
     quote: null, status: 'idle', output: null, takes: [], jobId: null, error: null, ...pos };
 }
 
