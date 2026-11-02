@@ -90,14 +90,19 @@ def loop_graph(mode: str, duration: float, seconds: float, audio: bool) -> tuple
         return g, maps
     d = seconds
     end = duration
-    g = (f"[0:v]trim=start={end - d:.3f}:end={end:.3f},setpts=PTS-STARTPTS[t];"
-         f"[0:v]trim=start=0:end={end - d:.3f},setpts=PTS-STARTPTS[m];"
-         f"[t][m]xfade=transition=fade:duration={d:.3f}:offset=0[v]")
+    # split antes de usar a mesma entrada duas vezes (ffmpeg não aceita [0:v] consumido duas vezes).
+    # Sem setpts após o trim: com timestamps zerados o xfade não recebe quadros (testado no ffmpeg 8).
+    g = (f"[0:v]split[va][vb];"
+         f"[va]trim=start={end - d:.3f}:end={end:.3f}[t];"
+         f"[vb]trim=start=0:end={end - d:.3f}[m];"
+         f"[t][m]xfade=transition=fade:duration={d:.3f}:offset=0,setpts=PTS-STARTPTS[v]")
     maps = ["[v]"]
     if audio:
-        g += (f";[0:a]atrim=start={end - d:.3f}:end={end:.3f},asetpts=PTS-STARTPTS[ta];"
-              f"[0:a]atrim=start=0:end={end - d:.3f},asetpts=PTS-STARTPTS[ma];"
-              f"[ta][ma]acrossfade=d={d:.3f}[a]")
+        # som: a cauda sai enquanto o começo entra (amix). acrossfade não produz áudio neste grafo (testado).
+        g += (f";[0:a]asplit[aa][ab];"
+              f"[aa]atrim=start={end - d:.3f}:end={end:.3f},asetpts=PTS-STARTPTS,afade=t=out:st=0:d={d:.3f}[ta];"
+              f"[ab]atrim=start=0:end={end - d:.3f},asetpts=PTS-STARTPTS,afade=t=in:st=0:d={d:.3f}[ma];"
+              f"[ta][ma]amix=inputs=2:duration=longest:normalize=0[a]")
         maps.append("[a]")
     return g, maps
 

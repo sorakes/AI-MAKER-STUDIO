@@ -76,7 +76,7 @@ def test_pingpong_graph_reverses_video_and_audio_when_present():
 def test_crossfade_graph_blends_the_tail_into_the_head():
     g, maps = extend.loop_graph("crossfade", 4.0, 1.0, audio=True)
     assert "xfade=transition=fade:duration=1.000" in g
-    assert "trim=start=3.000:end=4.000" in g and "acrossfade=d=1.000" in g
+    assert "trim=start=3.000:end=4.000" in g and "amix=inputs=2" in g
     assert maps == ["[v]", "[a]"]
 
 
@@ -119,6 +119,15 @@ def test_crossfade_loop_is_the_clip_minus_the_fade(me, tmp_path):
     out = extend.apply_loop({"kind": "loop", "mode": "crossfade", "seconds": 1.0}, src, tmp_path / "cf.mp4")
     assert abs(media.probe(out)["duration"] - 2.0) < 0.3
     assert not extend.has_audio(out)
+
+
+@needs_ffmpeg
+def test_crossfade_loop_with_sound_keeps_audio_and_length(tmp_path):
+    """Regressão: o grafo do crossfade falhava (entrada usada duas vezes sem split)."""
+    src = _clip(tmp_path / "d.mp4", 2, audio=True)
+    out = extend.apply_loop({"kind": "loop", "mode": "crossfade", "seconds": 0.5}, src, tmp_path / "cfa.mp4")
+    assert abs(media.probe(out)["duration"] - 1.5) < 0.3
+    assert extend.has_audio(out)
 
 
 @needs_ffmpeg
