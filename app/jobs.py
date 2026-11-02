@@ -17,7 +17,7 @@ import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from . import audio as sound, db, extend, lipsync, media, montage, outpaint, promptgen, providers, registry, relight, storage, subtitles, upscale, usage
+from . import audio as sound, db, extend, videoedit, lipsync, media, montage, outpaint, promptgen, providers, registry, relight, storage, subtitles, upscale, usage
 from .auth import CURRENT, public_user
 
 JOBS: dict[str, dict] = {}
@@ -123,6 +123,8 @@ def plan(user: dict, r: RenderRequest) -> list[dict]:
                                 else f"O modelo de vídeo escolhido não faz {what}")
         return m
 
+    if r.gen == "videoedit":  # edição por quadros: um modelo de imagem por quadro (custo = quadros × imagem)
+        return [_step("video", image_model(r.image_model), "Edição por quadros")]
     if r.gen == "image":
         return [_step("image", image_model(r.model), "Imagem")]
     if r.gen == "bridge":
@@ -234,7 +236,7 @@ def prepare(user: dict, r: RenderRequest) -> dict:
     models = {s["model"]: (upscale.LOCAL if s["provider"] == "local" else VIRTUAL[s["model"]] if s["model"] in VIRTUAL
                            else registry.get(s["model"])) for s in steps}
     for s in steps:
-        s["est"] = registry.estimate(models[s["model"]], r.duration if s["kind"] == "video" else 1)
+        s["est"] = registry.estimate(models[s["model"]], r.duration if s["kind"] == "video" else 1) * (videoedit.frame_count(r.duration) if r.gen == "videoedit" else 1)  # um modelo de imagem por quadro
     est = sum(s["est"] for s in steps)
     usage.check(user, images=sum(s["kind"] == "image" for s in steps), videos=sum(s["kind"] == "video" for s in steps),
                 est_cost=est, model_ids=[k for k in models if k != upscale.LOCAL_ID], pending=_pending(user["id"]))
@@ -432,7 +434,15 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 prompt, caption = await asyncio.to_thread(promptgen.adapt_to_frame, spec.prompt, prev_image)
                 job["spec"]["prompt"], job["first_frame_caption"] = prompt, caption
             try:
-                if spec.gen in sound.GEN_MODEL:  # voz, música ou efeito: arquivo de áudio (mp3) guardado no render
+                if spec.gen == "videoedit":  # edição por quadros: cada quadro vai ao modelo de imagem; o resto volta original
+                    job["detail"] = "editando os quadros"
+                    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}.mp4"
+                    op = {**spec.local_op, "user_id": job["user_id"]}
+                    src = storage.resolve(spec.ref_image_urls[0], user)
+                    cost = await asyncio.to_thread(videoedit.run, src, op, dest,
+                                                   lambda prompt, frame_url: _openrouter_image(m, prompt, spec, [frame_url]))
+                    st["output"], url = storage.to_url(dest), None
+                elif spec.gen in sound.GEN_MODEL:  # voz, música ou efeito: arquivo de áudio (mp3) guardado no render
                     job["detail"] = f"gerando {sound.LABELS[spec.gen].lower()}"
                     dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}.mp3"
                     cost = await asyncio.to_thread(sound.run, spec.gen, spec, dest, m)
