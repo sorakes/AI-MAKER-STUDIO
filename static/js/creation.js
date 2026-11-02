@@ -12,11 +12,11 @@ const CAMERA_HINTS = {
 const CAST_KINDS = { personagem: 'Personagem', produto: 'Produto', logo: 'Logo / marca', estilo: 'Estilo / ambiente' };
 
 function newBrief(pos) {
-  return { id: uid('brief'), type: 'brief', name: t('Roteiro'), brief: '', total: 15, aspect: '16:9', chain: false, plan: null, ...pos };
+  return { id: uid('brief'), type: 'brief', name: 'Roteiro', brief: '', total: 15, aspect: '16:9', chain: false, plan: null, ...pos };
 }
 
 function newCast(pos) {
-  return { id: uid('cast'), type: 'cast', name: t('Elenco'), castKind: 'produto', desc: '', refs: [], ...pos };
+  return { id: uid('cast'), type: 'cast', name: 'Elenco', castKind: 'produto', desc: '', refs: [], ...pos };
 }
 
 // Item do estúdio (Personagens/Produtos) escolhido no nó.

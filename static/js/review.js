@@ -12,7 +12,7 @@ const through = (n) => {
 };
 
 function newReviewNode(pos) {
-  return { id: uid('review'), type: 'review', name: t('Aprovação'), gate: true, approval: null, rejections: [], comment: '', ...pos };
+  return { id: uid('review'), type: 'review', name: 'Aprovação', gate: true, approval: null, rejections: [], comment: '', ...pos };
 }
 
 // Chave do que está sendo aprovado: se a mídia de cima mudar, a aprovação deixa de valer.

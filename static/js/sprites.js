@@ -407,7 +407,7 @@ async function buildSheet(n) {
 const DRAG_ASSET = 'application/x-studio-asset';
 
 function newSave(pos) {
-  return { id: uid('save'), type: 'save', name: t('Salvar na biblioteca'), excluded: [], cover: null, ...pos };
+  return { id: uid('save'), type: 'save', name: 'Salvar na biblioteca', excluded: [], cover: null, ...pos };
 }
 
 function spawnSave(g, poses, sheet) {

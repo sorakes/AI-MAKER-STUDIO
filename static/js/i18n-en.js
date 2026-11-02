@@ -479,3 +479,5 @@ I18N.add('en', {"Limitação:": "Limitation:", "a fala e a boca são geradas pel
 I18N.add('en', {"Nó \"Estender / loop\" foi desativado e removido deste canvas": "The \"Extend / loop\" node was retired and removed from this canvas"});
 I18N.add('en', {"BETA": "BETA", "Recurso em beta": "Beta feature", "Recurso em beta: pode mudar ou falhar": "Beta feature: it may change or fail", "áudio (beta)": "audio (beta)"});
 I18N.add('en', {"Gerar áudio": "Generate audio"});
+I18N.add('en', {"Máscara: {} px · mudança dentro {} · fora {}": "Mask: {} px · change inside {} · outside {}", "A IA não alterou a região marcada.": "The AI did not change the marked region.", "Tentar de novo": "Try again"});
+I18N.add('en', {"Região pintada": "Region painted", "Região pintada · Desenho": "Region painted · Drawing", "Desenho": "Drawing", "Limpar região": "Clear region"});

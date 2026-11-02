@@ -7,7 +7,7 @@ const VEDIT_STRENGTH = [['low', 'Leve'], ['medium', 'Média'], ['high', 'Forte']
 const VEDIT_CONFIRM_USD = 0.25;
 
 function newVideoEdit(pos) {
-  return { id: uid('vedit'), type: 'videoedit', name: t('Editar vídeo'), prompt: '', preset: 'none', strength: 'medium',
+  return { id: uid('vedit'), type: 'videoedit', name: 'Editar vídeo', prompt: '', preset: 'none', strength: 'medium',
     start: 0, end: 3, preserveAudio: true, quote: null, status: 'idle', output: null, takes: [], jobId: null, error: null, ...pos };
 }
 
