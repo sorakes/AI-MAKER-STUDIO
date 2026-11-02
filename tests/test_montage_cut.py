@@ -24,5 +24,6 @@ def test_cut_only_sequence_keeps_the_sum_of_the_clips(tmp_path):
                                         {"type": "clip", "path": c}], "16:9")
     try:
         assert abs(media.probe(out)["duration"] - 3.0) < 0.05  # antes: 2 cortes tiravam ~0,1 s
+        assert out.with_name(f"{out.stem}_first.png").exists()  # miniatura: a biblioteca não pede um 404
     finally:
         out.unlink(missing_ok=True)

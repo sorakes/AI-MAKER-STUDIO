@@ -41,3 +41,27 @@ def prompt_for(req: PerformanceRequest) -> str:
 def find_model(models: list[dict]) -> dict | None:
     """O modelo de performance, se estiver liberado para o usuário e disponível."""
     return next((m for m in models if m.get("model_id") == PERF_MODEL_ID and m.get("available", True)), None)
+
+
+FRAME_SIZES = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (720, 720)}
+
+
+def fit_frame(src, aspect: str, dest):
+    """Quadro inicial no formato pedido. O modelo segue o formato da imagem inicial (e não o aspect_ratio),
+    então a imagem é encaixada inteira no quadro, com o fundo desfocado da própria imagem (sem cortar o rosto)."""
+    from PIL import Image, ImageFilter, ImageOps
+
+    w, h = FRAME_SIZES[aspect]
+    img = Image.open(src).convert("RGB")
+    bg = ImageOps.fit(img, (w, h), Image.LANCZOS).filter(ImageFilter.GaussianBlur(28))
+    scale = min(w / img.width, h / img.height)
+    fg = img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))), Image.LANCZOS)
+    bg.paste(fg, ((w - fg.width) // 2, (h - fg.height) // 2))
+    bg.save(dest, format="PNG")
+    return dest
+
+
+def needs_fit(size: tuple[int, int], aspect: str, tolerance: float = 0.02) -> bool:
+    """A imagem já está no formato pedido? (diferença de proporção maior que a tolerância)."""
+    w, h = FRAME_SIZES[aspect]
+    return abs(size[0] / size[1] - w / h) > tolerance

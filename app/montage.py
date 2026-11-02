@@ -5,7 +5,7 @@ from pathlib import Path
 
 from . import storage
 from .config import MONTAGE_FPS
-from .media import _ff, probe
+from .media import _ff, extract_frame, probe
 
 RESOLUTIONS = {"16:9": (1280, 720), "9:16": (720, 1280), "1:1": (960, 960)}
 
@@ -85,4 +85,8 @@ def assemble_sequence(uid: int, items: list[dict], aspect: str = "16:9", audio: 
     except BaseException:  # falha ou timeout: não deixa corte parcial ocupando disco
         out.unlink(missing_ok=True)
         raise
+    try:  # miniatura do corte: a biblioteca pede o _first.png do vídeo e, sem ele, mostrava 404
+        extract_frame(out, last=False)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        pass  # sem miniatura o corte continua válido
     return out

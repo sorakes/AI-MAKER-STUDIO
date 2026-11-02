@@ -346,13 +346,25 @@ async def _audio_seconds(url: str | None, user: dict) -> float | None:
     return info["duration"]
 
 
+async def _performance_frame(url: str, user: dict, aspect: str) -> str:
+    """Quadro inicial no formato pedido: o modelo segue a imagem inicial, não o aspect_ratio do pedido."""
+    path = storage.resolve(url, user)
+    size = await asyncio.to_thread(upscale.image_size, path)
+    if not performance.needs_fit(size, aspect):
+        return url
+    dest = storage.user_dir(user["id"], "renders") / f"perf_frame_{secrets.token_hex(4)}.png"
+    await asyncio.to_thread(performance.fit_frame, path, aspect, dest)
+    return storage.to_url(dest)
+
+
 async def _performance_job(user: dict, req: performance.PerformanceRequest, m: dict,
                            audio_seconds: float | None = None) -> dict:
     prompt = performance.prompt_for(req)
+    frame = await _performance_frame(req.image_url, user, req.aspect)
     return await _image_job(user, jobs.RenderRequest(
         node_id=req.node_id, name=req.name, gen="video", model=m["id"], prompt=prompt, keyframe_prompt=prompt,
         aspect=req.aspect, duration=performance.seconds_for(req.text, audio_seconds), quality="draft",
-        start_image_url=req.image_url, ref_image_urls=[], generate_audio=True))
+        start_image_url=frame, ref_image_urls=[], generate_audio=True))
 
 
 @router.post("/video/performance/quote")
