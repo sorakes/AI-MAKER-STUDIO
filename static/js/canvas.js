@@ -799,6 +799,7 @@ async function renderLibrary() {
   state.files = items;
   $('#cvStorage').textContent = `${items.length} arquivo(s) · ${fmtBytes(data.used)}${data.limit_mb != null ? ` de ${data.limit_mb} MB` : ''}. Arraste para o canvas.`;
   const sig = items.map((i) => i.url).join('|');
+  LIBRARY_ITEMS = items;  // o visualizador (duplo clique) percorre esta lista com ← →
   if (sig === renderLibrary._sig) return;
   renderLibrary._sig = sig;
   $('#cvLibrary').innerHTML = items.length ? items.map((m, i) =>

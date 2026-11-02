@@ -1123,3 +1123,29 @@ label:has(> input[type=checkbox]) > input[type=checkbox] { flex-shrink: 0; margi
 label:has(> input[type=checkbox]) > span { min-width: 0; }
 .beta-tag { vertical-align: middle; }
 .vedit-check, .audio-toggle { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 6px; }
+
+/* Visualizador em modal (duplo clique em mídia): cabe em qualquer tela, sem vazar */
+.viewer-dialog { width: min(1400px, 96vw); height: min(900px, 92vh); max-width: 96vw; max-height: 92vh; padding: 0;
+  border: 1px solid #2a2f3a; border-radius: 12px; background: #0b0d12; color: #e7eaf0; overflow: hidden; }
+.viewer-dialog[open] { display: flex; }
+.viewer-dialog::backdrop { background: rgba(0,0,0,.74); backdrop-filter: blur(2px); }
+.viewer-wrap { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.viewer-top { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; justify-content: space-between; padding: 10px 14px;
+  border-bottom: 1px solid #1f2430; }
+.viewer-title { display: flex; flex-direction: column; min-width: 0; flex: 1 1 220px; }
+.viewer-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-title small { opacity: .7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.viewer-check { display: inline-flex; gap: 4px; align-items: center; font-size: .85rem; }
+.viewer-zoom { min-width: 4.5em; text-align: center; font-variant-numeric: tabular-nums; font-size: .85rem; }
+.viewer-stage { flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; display: flex; align-items: center;
+  justify-content: center; cursor: grab; touch-action: none; }
+.viewer-stage.dragging { cursor: grabbing; }
+.viewer-media { display: block; }
+.viewer-media.fit { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+video.viewer-media { max-width: 100%; max-height: 100%; width: auto; height: auto; }
+.viewer-hint { margin: 0; padding: 6px 14px 8px; font-size: .78rem; opacity: .7; border-top: 1px solid #1f2430; }
+@media (max-width: 640px) {
+  .viewer-dialog { width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; border-radius: 0; }
+  .viewer-tools .viewer-check span { display: none; }
+}

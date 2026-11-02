@@ -96,7 +96,7 @@ function renderInventory() {
       INV.last = +el.dataset.i;
       renderInventory();
     });
-    el.addEventListener('dblclick', () => window.open(f.url, '_blank'));
+    el.addEventListener('dblclick', () => viewerOpen(vis, f.url, el));  // imagem/vídeo: visualizador com ← → pelo inventário
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       if (!INV.sel.has(f.url)) { INV.sel.clear(); INV.sel.add(f.url); INV.last = +el.dataset.i; renderInventory(); }
