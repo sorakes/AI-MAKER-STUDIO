@@ -44,7 +44,8 @@ class RenderRequest(BaseModel):
     require_refs: bool = False         # posições de personagem/produto: só modelos que recebem as referências
     compose: bool = False              # 1º frame conectado + elenco: gera antes um 1º frame com o elenco na cena
     direction_image_url: str | None = None  # desenho da câmera/elementos sobre o 1º frame (referência do vídeo)
-    upscale_factor: int = 0  # gen=upscale: fator final (2 ou 4); a saída da IA é levada a esse tamanho
+    upscale_factor: int = 0  # gen=upscale: fator final (2 ou 4)
+    target_size: list[int] = Field(default_factory=list)  # tamanho exato da saída (edições com IA); a IA não o garante
     local_op: dict = Field(default_factory=dict)  # gen=relight/style/outpaint/inpaint: operação do ajuste local (Pillow)
     composite: dict = Field(default_factory=dict)  # outpaint/inpaint: recompõe o original sobre o que a máscara protege
     extend_source_url: str = ""  # gen=video com quadro inicial de extensão: une o clipe original com a continuação
@@ -457,7 +458,10 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 if url:
                     job["detail"] = "baixando resultado"
                     st["output"] = await asyncio.to_thread(_store, job, i, url, st["kind"])
-                    if spec.upscale_factor:  # IA devolve tamanho próprio: leva ao fator pedido
+                    if spec.target_size:  # IA devolve tamanho próprio: leva exatamente ao tamanho do original (× fator)
+                        job["detail"] = "ajustando ao tamanho final"
+                        await asyncio.to_thread(upscale.resize_to, storage.resolve(st["output"]), tuple(spec.target_size))
+                    elif spec.upscale_factor:
                         job["detail"] = "ajustando ao tamanho final"
                         await asyncio.to_thread(upscale.resize_file, storage.resolve(st["output"]), spec.upscale_factor)
                     if spec.composite:  # a área protegida volta a ser o original, byte a byte na composição

@@ -68,6 +68,25 @@ def image_size(path: Path) -> tuple[int, int]:
         return im.size
 
 
+def aspect_for(w: int, h: int) -> str:
+    """Aspecto do original entre os formatos que o app gera (a IA precisa do mesmo aspecto para não distorcer)."""
+    r = w / h
+    return "9:16" if r < 0.8 else "1:1" if r < 1.2 else "16:9"
+
+
+def resize_to(src: Path, size: tuple[int, int], dest: Path | None = None) -> Path:
+    """Leva a saída da IA ao tamanho exato pedido (Lanczos), sem multiplicar o tamanho que a IA devolveu."""
+    dest = dest or src
+    with Image.open(src) as im:
+        fmt = im.format or "PNG"
+        base = im.copy()
+    if fmt in ("JPEG", "WEBP") and base.mode not in ("RGB", "RGBA"):
+        base = base.convert("RGB")
+    out = base.resize(size, Image.Resampling.LANCZOS)
+    out.save(dest, format=fmt, **({"quality": 95} if fmt == "JPEG" else {}))
+    return dest
+
+
 def resize_file(src: Path, factor: int, dest: Path | None = None) -> Path:
     """Upscale local: Lanczos até o fator exato + nitidez leve. Grava em `dest` (ou sobrescreve `src`)."""
     if factor not in (2, 4):
