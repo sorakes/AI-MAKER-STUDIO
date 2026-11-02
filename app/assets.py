@@ -86,11 +86,18 @@ def list_for(user: dict, kind: str | None = None) -> list[dict]:
     return [_row(r) for r in db.all_(sql + " ORDER BY updated DESC", args)]
 
 
-def get(asset_id: str, user: dict) -> dict:
-    r = db.one("SELECT * FROM assets WHERE id = ?", (asset_id,))
+def _visible(r: dict | None, user: dict) -> dict:
     if not r or (r["user_id"] != user["id"] and not user.get("is_admin", user.get("role") == "admin")):
         raise HTTPException(404, "Item não encontrado")
     return _row(r)
+
+
+def get(asset_id: str, user: dict) -> dict:
+    return _visible(db.one("SELECT * FROM assets WHERE id = ?", (asset_id,)), user)
+
+
+async def aget(asset_id: str, user: dict) -> dict:
+    return _visible(await db.aone("SELECT * FROM assets WHERE id = ?", (asset_id,)), user)
 
 
 def _write(a: dict, user_id: int):

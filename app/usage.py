@@ -8,15 +8,27 @@ from . import db
 from .auth import CURRENT
 
 
-def log(kind: str, *, provider: str | None = None, model: str | None = None, cost: float = 0.0,
-        status: str = "ok", detail: str | dict | None = None, user_id: int | None = None):
+_LOG_SQL = "INSERT INTO usage(ts, user_id, kind, provider, model, cost, status, detail) VALUES(?,?,?,?,?,?,?,?)"
+
+
+def _log_args(kind: str, provider, model, cost, status, detail, user_id) -> tuple:
     if user_id is None:
         u = CURRENT.get()
         user_id = u["id"] if u else None
     if isinstance(detail, dict):
         detail = json.dumps(detail, ensure_ascii=False)
-    db.run("INSERT INTO usage(ts, user_id, kind, provider, model, cost, status, detail) VALUES(?,?,?,?,?,?,?,?)",
-           (db.now(), user_id, kind, provider, model, float(cost or 0), status, (detail or "")[:2000]))
+    return (db.now(), user_id, kind, provider, model, float(cost or 0), status, (detail or "")[:2000])
+
+
+def log(kind: str, *, provider: str | None = None, model: str | None = None, cost: float = 0.0,
+        status: str = "ok", detail: str | dict | None = None, user_id: int | None = None):
+    db.run(_LOG_SQL, _log_args(kind, provider, model, cost, status, detail, user_id))
+
+
+async def alog(kind: str, *, provider: str | None = None, model: str | None = None, cost: float = 0.0,
+               status: str = "ok", detail: str | dict | None = None, user_id: int | None = None):
+    """Versão async (aiosqlite) de log(): para uso dentro de rotas e tarefas async."""
+    await db.arun(_LOG_SQL, _log_args(kind, provider, model, cost, status, detail, user_id))
 
 
 def month_start() -> float:
