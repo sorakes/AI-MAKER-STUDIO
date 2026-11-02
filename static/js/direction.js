@@ -429,9 +429,9 @@ function renderDzCards() {
 // ---------------- IA ----------------
 
 // Frame + desenho numa imagem só (o que o modelo de visão vê).
-function annotatedImage() {
+function annotatedImage(maxSide = 1280) {
   const img = dz.img;
-  const s = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+  const s = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
   const W = Math.round(img.naturalWidth * s), H = Math.round(img.naturalHeight * s);
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
@@ -440,7 +440,7 @@ function annotatedImage() {
   const k = W / 900;
   dz.layers.forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, k * 1.3, arrowColor(l.color))));
   dz.layers.forEach((l) => paintTag(g, l, W, H, k * 1.4));
-  return c.toDataURL('image/jpeg', 0.86);
+  return c.toDataURL('image/jpeg', maxSide <= 640 ? 0.8 : 0.86);
 }
 
 const activeLayers = () => dz.layers.filter((l) => l.shapes.length || l.prompt.trim());
@@ -546,14 +546,8 @@ async function saveDirection() {
   btn.disabled = true;
   try {
     if (activeLayers().length && !dz.result) await interpretDirection().catch((e) => toast(`Não deu para interpretar agora: ${e.message}`));
-    let diagram = null;
-    if (activeLayers().length) {
-      try {
-        const blob = await (await fetch(annotatedImage())).blob();
-        const m = await uploadFile(new File([blob], `direcao_${n.id}.jpg`, { type: 'image/jpeg' }));
-        diagram = m.url;
-      } catch (e) { toast(`Desenho não salvo como imagem: ${e.message}`); }
-    }
+    // o desenho vai no próprio documento do node (JPEG pequeno): nenhum arquivo é criado em Meus arquivos
+    const diagram = activeLayers().length ? annotatedImage(640) : null;
     n.direction = activeLayers().length ? { frame: dz.frame, layers: dz.layers, result: dz.result, diagram_url: diagram } : null;
     n.camAnalysis = n.direction?.result?.camera_move ? { move: n.direction.result.camera_move } : null; // usado nas transições
     n.autoKey = null;

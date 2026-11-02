@@ -111,7 +111,14 @@ function maskDataUrl() {
     o.data[i] = v; o.data[i + 1] = v; o.data[i + 2] = v; o.data[i + 3] = 255;
   }
   og.putImageData(o, 0, 0);
-  return painted ? out.toDataURL('image/png') : null;
+  if (!painted) return null;
+  // máscara compacta (até 512 px) no documento do node; o servidor reajusta ao tamanho da imagem
+  const k = Math.min(1, 512 / Math.max(W, H));
+  const small = document.createElement('canvas');
+  small.width = Math.max(1, Math.round(W * k));
+  small.height = Math.max(1, Math.round(H * k));
+  small.getContext('2d').drawImage(out, 0, 0, small.width, small.height);
+  return small.toDataURL('image/png');
 }
 
 function saveMask() {
