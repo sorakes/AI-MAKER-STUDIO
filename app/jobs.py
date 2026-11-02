@@ -476,7 +476,8 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     items = [{"type": "clip", "path": storage.resolve(spec.extend_source_url, user)}]
                     if spec.extend_transition == "dissolve":
                         items.append({"type": "transition", "kind": "dissolve", "duration": 0.5})
-                    items.append({"type": "clip", "path": storage.resolve(st["output"], user)})
+                    # o provedor cobra o mínimo do modelo (ex.: 4 s); a continuação entra só com a duração pedida
+                    items.append({"type": "clip", "path": storage.resolve(st["output"], user), "end": float(spec.duration)})
                     joined = await asyncio.to_thread(montage.assemble_sequence, job["user_id"], items, spec.aspect, None)
                     st["output"] = storage.to_url(joined)
             except Exception as e:

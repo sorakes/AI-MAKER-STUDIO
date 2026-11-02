@@ -154,6 +154,25 @@ def test_loop_endpoint_runs_end_to_end(me, no_ai, login, make_user, monkeypatch)
 
 
 @needs_ffmpeg
+def test_continuation_is_trimmed_to_the_requested_length(me, i2v_available, monkeypatch, login, make_user):
+    """Regressão: o provedor entrega 4 s (mínimo do modelo) para 3 s pedidos; a união usa só os 3 s."""
+    started = []
+    monkeypatch.setattr(jobs, "start", lambda job, user, resume=False: started.append(job))
+
+    async def provider_4s(job, st, m, i, n, prompt, spec, prev_image, ref_urls):
+        return _clip(storage.user_dir(me["id"], "renders") / f"cont4-{_uniq()}.mp4", 4, audio=False).read_bytes()
+    monkeypatch.setattr(jobs, "_or_video", provider_4s)
+    u = make_user(f"ext-trim-{_uniq()}@test.local")
+    c = login(u["email"], c=TestClient(app))
+    me2 = auth.public_user(u)
+    url, _ = _mine_video(me2, 2)
+    assert c.post("/api/video/extend", json={"source_url": url, "seconds": 3}).status_code == 200
+    asyncio.run(jobs._run(started[0], me2))
+    assert started[0]["status"] == "done", started[0].get("error")
+    assert abs(media.probe(storage.resolve(started[0]["output"], me2))["duration"] - 5.0) < 0.4  # 2 s + 3 s, não 2 s + 4 s
+
+
+@needs_ffmpeg
 def test_extend_uses_the_last_frame_and_joins_the_continuation(me, i2v_available, monkeypatch, login, make_user):
     started = []
     monkeypatch.setattr(jobs, "start", lambda job, user, resume=False: started.append(job))
