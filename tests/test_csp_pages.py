@@ -38,3 +38,27 @@ def test_media_sources_are_local_only():
     assert "https:" not in csp.split("img-src")[1].split(";")[0]
     assert "https:" not in csp.split("media-src")[1].split(";")[0]
     assert "'unsafe-eval'" not in csp
+
+
+def test_style_src_has_no_unsafe_inline():
+    style = PAGE_CSP.split("style-src")[1].split(";")[0]
+    assert "'unsafe-inline'" not in style and "'unsafe-eval'" not in PAGE_CSP
+
+
+def test_no_style_attributes_or_style_blocks_in_markup():
+    import re as _re
+    for path in list((config.STATIC_DIR / "js").glob("*.js")) + [config.STATIC_DIR / p for p in PAGES]:
+        text = path.read_text(encoding="utf-8")
+        assert not _re.search(r'(?<=[\s<`])style="', text), path.name
+    for name in PAGES:
+        assert "<style" not in (config.STATIC_DIR / name).read_text(encoding="utf-8"), name
+
+
+def test_pages_load_styles_applier_before_render_scripts():
+    for name in PAGES:
+        html = (config.STATIC_DIR / name).read_text(encoding="utf-8")
+        assert "/js/styles.js" in html, name
+        # o aplicador precisa estar antes de qualquer script que renderize markup com data-st
+        renderers = [html.index(s) for s in ("/js/common.js", "/js/login.js", "/js/admin.js") if s in html]
+        if renderers:
+            assert html.index("/js/styles.js") < min(renderers), name

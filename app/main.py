@@ -91,9 +91,9 @@ def _asset_version() -> str:
 ASSET_VERSION = _asset_version()
 
 
-# Páginas HTML: scripts só do próprio servidor (sem inline); mídia só local/data/blob (todo arquivo do provedor é baixado
-# para /files). Estilos inline ainda permitidos: 38 atributos style="" nos templates JS (ver FORJA3).
-PAGE_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+# Páginas HTML: scripts e estilos só do próprio servidor (sem inline). Mídia só local/data/blob: todo arquivo do
+# provedor é baixado para /files. Estilos por CSSOM (data-st + js/styles.js), nunca atributo style="".
+PAGE_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; "
             "media-src 'self' blob: data:; connect-src 'self' blob:; object-src 'none'; base-uri 'self'; "
             "form-action 'self'; frame-ancestors 'none'")

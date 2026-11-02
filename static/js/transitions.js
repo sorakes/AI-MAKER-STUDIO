@@ -156,9 +156,9 @@ function transitionBody(n) {
     : mode === 'edit' && (!aVid || !bVid) ? 'Edição precisa de vídeo em A e em B (com imagem use o modo IA)' : '';
   return `
     <div class="tr-strip">
-      <div class="tr-frame ${exit ? '' : 'empty'}" style="background-image:url('${exit || ''}')"><span>A · ${esc(kindOf(a))}${n.cutAt != null ? ` · ${(+n.cutAt).toFixed(2)}s` : ''}</span></div>
+      <div class="tr-frame ${exit ? '' : 'empty'}" data-st="background-image:url('${exit || ''}')"><span>A · ${esc(kindOf(a))}${n.cutAt != null ? ` · ${(+n.cutAt).toFixed(2)}s` : ''}</span></div>
       <div class="tr-mid"><b>${ic(TR_MODES[mode].icon)}</b><small>${mode === 'ai' ? `${n.bridgeDur}s` : ''}</small></div>
-      <div class="tr-frame ${entry ? '' : 'empty'}" style="background-image:url('${entry || ''}')"><span>B · ${esc(kindOf(b))}${n.bIn != null ? ` · ${(+n.bIn).toFixed(2)}s` : ''}</span></div>
+      <div class="tr-frame ${entry ? '' : 'empty'}" data-st="background-image:url('${entry || ''}')"><span>B · ${esc(kindOf(b))}${n.bIn != null ? ` · ${(+n.bIn).toFixed(2)}s` : ''}</span></div>
     </div>
     <div class="cv-meta"><span>A: ${a ? esc(a.name) : '—'}</span><span>B: ${b ? esc(b.name) : '—'}</span></div>
     <div class="tr-modes">${Object.entries(TR_MODES).map(([k, v]) =>
@@ -166,11 +166,11 @@ function transitionBody(n) {
 
     ${mode === 'ai' ? `
       <textarea data-k="idea" rows="2" placeholder="Como a câmera vai de A para B? (opcional) Ex.: entra no vidro da garrafa e sai no bar">${esc(n.idea || '')}</textarea>
-      <div class="cv-grid4"><label style="grid-column: span 4">Modelo${modelSelect('model', 'video', n.model, { i2v: true, end_frame: true })}</label>
-      <label style="grid-column: span 2">Duração<select data-k="bridgeDur">${bridgeDurations(n).map((d) => `<option value="${d}" ${d == n.bridgeDur ? 'selected' : ''}>${d}s</option>`).join('')}</select></label>
-      <label style="grid-column: span 2">Qualidade<select data-k="quality"><option value="draft" ${n.quality !== 'final' ? 'selected' : ''}>Rascunho</option><option value="final" ${n.quality === 'final' ? 'selected' : ''}>Final</option></select></label></div>
+      <div class="cv-grid4"><label data-st="grid-column: span 4">Modelo${modelSelect('model', 'video', n.model, { i2v: true, end_frame: true })}</label>
+      <label data-st="grid-column: span 2">Duração<select data-k="bridgeDur">${bridgeDurations(n).map((d) => `<option value="${d}" ${d == n.bridgeDur ? 'selected' : ''}>${d}s</option>`).join('')}</select></label>
+      <label data-st="grid-column: span 2">Qualidade<select data-k="quality"><option value="draft" ${n.quality !== 'final' ? 'selected' : ''}>Rascunho</option><option value="final" ${n.quality === 'final' ? 'selected' : ''}>Final</option></select></label></div>
       ${bridgeModel(n) ? `<div class="cv-meta"><span>${esc(bridgeModel(n).label)}</span><span class="cv-cost">${costLabel(bridgeModel(n), n.bridgeDur)}</span></div>` : '<div class="cv-meta"><span class="err">Nenhum modelo com frame inicial + final liberado</span></div>'}`
-    : `<div class="cv-grid4"><label style="grid-column: span 3">Tipo<select data-k="editKind">${Object.entries(state.catalog.transitions)
+    : `<div class="cv-grid4"><label data-st="grid-column: span 3">Tipo<select data-k="editKind">${Object.entries(state.catalog.transitions)
         .filter(([k]) => !['bridge', 'match_cut'].includes(k))
         .map(([k, v]) => `<option value="${k}" ${k === trKind(n) ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select></label>
       <label>Duração<select data-k="duration"><option value="">auto</option>${[0.25, 0.4, 0.6, 0.8, 1.2].map((d) => `<option value="${d}" ${n.duration == d ? 'selected' : ''}>${d}s</option>`).join('')}</select></label></div>`}

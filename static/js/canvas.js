@@ -700,7 +700,7 @@ async function renderLibrary() {
   if (sig === renderLibrary._sig) return;
   renderLibrary._sig = sig;
   $('#cvLibrary').innerHTML = items.length ? items.map((m, i) =>
-    `<div class="cv-lib-item ${m.kind}" draggable="true" data-i="${i}" title="${esc(m.name)} · ${fmtBytes(m.size)}" ${m.thumb ? `style="background-image:url('${m.thumb}')"` : ''}>${m.kind === 'audio' ? ic('music') : ''}<span>${m.kind === 'video' ? ic('play') : m.kind === 'audio' ? 'áudio' : ic('image')}</span><button class="del" data-del="${i}" title="Apagar arquivo" aria-label="Apagar arquivo">${ic('trash')}</button></div>`).join('')
+    `<div class="cv-lib-item ${m.kind}" draggable="true" data-i="${i}" title="${esc(m.name)} · ${fmtBytes(m.size)}" ${m.thumb ? `data-st="background-image:url('${m.thumb}')"` : ''}>${m.kind === 'audio' ? ic('music') : ''}<span>${m.kind === 'video' ? ic('play') : m.kind === 'audio' ? 'áudio' : ic('image')}</span><button class="del" data-del="${i}" title="Apagar arquivo" aria-label="Apagar arquivo">${ic('trash')}</button></div>`).join('')
     : '<p class="cv-side-note">Nada ainda. Envie arquivos ou gere imagens/vídeos.</p>';
   document.querySelectorAll('.cv-lib-item').forEach((el) => {
     el.addEventListener('dragstart', (e) => e.dataTransfer.setData(DRAG_MEDIA, JSON.stringify(items[+el.dataset.i])));
@@ -843,7 +843,7 @@ function previewBlock(n, { placeholder, ghost } = {}) {
   const running = n.status === 'running';
   return `<div class="cv-preview ${out ? 'has' : ''} ${running ? 'busy' : ''}">
     ${media}
-    ${running ? `<div class="cv-busy"><div class="cv-busy-txt">${ic('loader', 'spin')}<span>${esc(n.stage || 'gerando')}</span><b>${n.progress || 0}%</b></div><div class="cv-bar"><i style="width:${n.progress || 0}%"></i></div></div>` : ''}
+    ${running ? `<div class="cv-busy"><div class="cv-busy-txt">${ic('loader', 'spin')}<span>${esc(n.stage || 'gerando')}</span><b>${n.progress || 0}%</b></div><div class="cv-bar"><i data-st="width:${n.progress || 0}%"></i></div></div>` : ''}
     ${out && !running ? `<div class="cv-pv-tools">
       ${takes.length > 1 ? `<div class="cv-takes"><button data-act="take" data-d="-1" title="Versão anterior" aria-label="Versão anterior">${ic('step-back')}</button><span>v${idx + 1}/${takes.length}</span><button data-act="take" data-d="1" title="Próxima versão" aria-label="Próxima versão">${ic('step-forward')}</button></div>` : '<span></span>'}
       <div class="cv-pv-btns">
@@ -994,7 +994,7 @@ function montageBody(n) {
       : `<div>${esc(s.name)} ${videoOf(s) ? ic('check', 'ok') : '— sem vídeo'}</div>`).join('') : '<div>Ligue planos ou vídeos aqui</div>'}</div>
     <div class="cv-refs" data-role="audio" title="Solte aqui um áudio de Meus arquivos">
       <div class="cv-refs-head"><b>Trilha / locução</b><span>${n.audio ? esc(n.audio.name || 'áudio') : 'opcional: solte um áudio aqui'}</span></div>
-      ${n.audio ? `<audio src="${n.audio.url}" controls style="width:100%"></audio><button class="btn small ghost" data-act="noaudio">Remover áudio</button>`
+      ${n.audio ? `<audio src="${n.audio.url}" controls data-st="width:100%"></audio><button class="btn small ghost" data-act="noaudio">Remover áudio</button>`
         : `<label class="btn small ghost">${ic('music')} Enviar áudio<input type="file" accept="audio/*" hidden data-role="audio-file"></label>`}
     </div>
     <div class="cv-foot"><button class="btn primary" data-act="montage">${ic('film')} ${n.output ? 'Montar de novo' : 'Montar corte'}</button></div>`;
@@ -1045,8 +1045,8 @@ function refsBlock(n, hint) {
   return `<div class="cv-refs" data-role="refs" title="Solte aqui imagens da biblioteca ou do computador">
     <div class="cv-refs-head"><b>Referências</b><span>${esc(hint)}</span></div>
     <div class="cv-refs-row">
-      ${(n.refs || []).map((r, i) => `<div class="cv-ref" style="background-image:url('${r.url}')" title="${esc(r.name || '')}"><span>${i + 1}</span><button data-del="${i}" title="Remover" aria-label="Remover">${ic('x')}</button></div>`).join('')}
-      ${linked.map((u, j) => `<div class="cv-ref linked" style="background-image:url('${u}')" title="Ligada na porta R"><span>${(n.refs || []).length + j + 1}</span></div>`).join('')}
+      ${(n.refs || []).map((r, i) => `<div class="cv-ref" data-st="background-image:url('${r.url}')" title="${esc(r.name || '')}"><span>${i + 1}</span><button data-del="${i}" title="Remover" aria-label="Remover">${ic('x')}</button></div>`).join('')}
+      ${linked.map((u, j) => `<div class="cv-ref linked" data-st="background-image:url('${u}')" title="Ligada na porta R"><span>${(n.refs || []).length + j + 1}</span></div>`).join('')}
       <label class="cv-ref add" title="Enviar imagem de referência">${ic('plus')}<input type="file" accept="image/*" multiple hidden data-role="ref-file"></label>
     </div>
   </div>`;

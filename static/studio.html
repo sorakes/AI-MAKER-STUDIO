@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
     <script src="/js/i18n.js"></script>
+  <script src="/js/styles.js"></script>
   <script src="/js/i18n-en.js"></script>
   <script src="/js/i18n-es.js"></script>
   <title>Studio</title>
@@ -23,7 +24,7 @@
     <button class="tab" data-view="product" title="Produtos" aria-label="Produtos"><i data-ic="logo"></i> Produtos</button>
     <button class="tab" data-view="inventory" title="Inventário" aria-label="Inventário"><i data-ic="folder"></i> Inventário</button>
   </nav>
-  <div class="cv-toolbar canvas-only" style="border:0;padding:0;background:none">
+  <div class="cv-toolbar canvas-only" data-st="border:0;padding:0;background:none">
     <button class="btn small primary" id="cvRunAll" title="Gera tudo que falta, na ordem das ligações, e monta o corte"><i data-ic="play"></i> Rodar fluxo</button>
     <button class="btn small ghost" id="cvFit"><i data-ic="fit"></i> Enquadrar</button>
     <button class="btn small ghost" id="cvClear">Limpar</button>
@@ -109,7 +110,7 @@
     </div>
   </div>
   <div class="dz-help" id="dzHelp">
-    <div><b class="n" style="background:#a855f7">1</b><span>Com o cartão <b style="color:#a855f7">CÂMERA</b> ativo, desenhe em <b>roxo</b> por onde a câmera vai sobre a imagem: o ponto é o começo, a seta é o fim.</span></div>
+    <div><b class="n" data-st="background:#a855f7">1</b><span>Com o cartão <b data-st="color:#a855f7">CÂMERA</b> ativo, desenhe em <b>roxo</b> por onde a câmera vai sobre a imagem: o ponto é o começo, a seta é o fim.</span></div>
     <div><b class="n">2</b><span>Clique em <b>+ Elemento</b> para ganhar uma cor nova. <b>Circule</b> o objeto e puxe uma <b>linha</b> mostrando para onde ele vai.</span></div>
     <div><b class="n">3</b><span>Em cada cartão, escreva o que acontece. Ex.: <i>AMARELO: a bola vai levemente para a direita</i>.</span></div>
     <div><b class="n">4</b><span><b>Salvar</b>: a IA olha o frame + desenho e escreve a direção no prompt do vídeo.</span></div>

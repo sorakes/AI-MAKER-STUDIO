@@ -10,7 +10,7 @@
       if (b.colors?.accent) root.setProperty('--accent', b.colors.accent);
       if (b.colors?.bg) root.setProperty('--bg', b.colors.bg);
       if (b.tagline) document.querySelector('p.sub').textContent = b.tagline;
-      if (b.logo_url) document.querySelector('.logo > span').innerHTML = `<img src="${b.logo_url}" alt="" style="height:28px;max-width:120px;object-fit:contain;image-rendering:auto">`;
+      if (b.logo_url) document.querySelector('.logo > span').innerHTML = `<img src="${b.logo_url}" alt="" data-st="height:28px;max-width:120px;object-fit:contain;image-rendering:auto">`;
       document.body.classList.toggle('pixel', b.style !== 'smooth');
       if (d.microsoft?.enabled) { document.body.classList.add('has-ms'); document.getElementById('msLabel').textContent = d.microsoft.label; }
     }).catch(() => {});

@@ -56,7 +56,7 @@ async function loadOverview() {
   ].map(([t, v, s, c]) => `<div class="kpi ${c || ''}"><small>${t}</small><b>${v}</b><span>${s}</span></div>`).join('');
   const days = Array.from({ length: new Date().getDate() }, (_, i) => o.days.find((d) => d.d === i) || { d: i, cost: 0, n: 0 });
   const max = Math.max(0.0001, ...days.map((d) => d.cost));
-  $('#chartDays').innerHTML = spend ? days.map((d) => `<div style="height:${(d.cost / max) * 100}%" data-tip="dia ${d.d + 1}: ${fmtUsd(d.cost)} · ${d.n} gerações"></div>`).join('')
+  $('#chartDays').innerHTML = spend ? days.map((d) => `<div data-st="height:${(d.cost / max) * 100}%" data-tip="dia ${d.d + 1}: ${fmtUsd(d.cost)} · ${d.n} gerações"></div>`).join('')
     : '<div class="empty">Sem gastos neste mês ainda.</div>';
   $('#topUsers').innerHTML = '<tr><th>Usuário</th><th class="num">Gerações</th><th class="num">Gasto</th></tr>'
     + o.top_users.map((u) => `<tr><td>${esc(u.name || u.email)}<br><small class="mono">${esc(u.email)}</small></td><td class="num">${u.n}</td><td class="num">${fmtUsd(u.cost)}</td></tr>`).join('');
@@ -73,7 +73,7 @@ document.addEventListener('click', (e) => {
 // ---------------- Usuários ----------------
 
 const meter = (used, max, fmt = (v) => v) => (max == null ? `<small>${fmt(used)} · ∞</small>`
-  : `<small>${fmt(used)} / ${fmt(max)}</small><div class="meter"><i class="${used / Math.max(1e-9, max) > 0.85 ? 'hot' : ''}" style="width:${max ? Math.min(100, (used / max) * 100) : 100}%"></i></div>`);
+  : `<small>${fmt(used)} / ${fmt(max)}</small><div class="meter"><i class="${used / Math.max(1e-9, max) > 0.85 ? 'hot' : ''}" data-st="width:${max ? Math.min(100, (used / max) * 100) : 100}%"></i></div>`);
 
 async function loadUsers() {
   A.users = await api('/api/admin/users');
@@ -158,7 +158,7 @@ async function userDialog(u) {
       <label>Status<select name="active"><option value="1">Ativa</option><option value="0" ${u && !u.active ? 'selected' : ''}>Desativada</option></select></label>
     </div>
     <div class="section-label"><span>Grupos</span><span class="hint">permissões e limites vêm dos grupos</span></div>
-    ${G.data.groups.length ? `<div class="checks">${G.data.groups.map((g) => `<label><input type="checkbox" name="ugroup" value="${g.id}" ${manualIds.has(g.id) ? 'checked' : ''}> <span class="gdot" style="--g:${esc(g.color)}"></span> ${esc(g.name)}</label>`).join('')}</div>` : '<p class="note">Nenhum grupo criado (aba Grupos).</p>'}
+    ${G.data.groups.length ? `<div class="checks">${G.data.groups.map((g) => `<label><input type="checkbox" name="ugroup" value="${g.id}" ${manualIds.has(g.id) ? 'checked' : ''}> <span class="gdot" data-st="--g:${esc(g.color)}"></span> ${esc(g.name)}</label>`).join('')}</div>` : '<p class="note">Nenhum grupo criado (aba Grupos).</p>'}
     ${msGroups.length ? `<p class="note">${ic('cloud')} Pela Microsoft: ${msGroups.map(groupTag).join(' ')} (atualiza a cada login)</p>` : ''}
     <div class="section-label"><span>Limites próprios da conta</span><span class="hint">vazio = do grupo/padrão · ∞ = sem limite</span></div>
     <div class="limits-grid">${limitsInputs(custom, settings.default_limits)}</div>
@@ -550,7 +550,7 @@ function renderFiles() {
     const thumb = f.kind === 'image' ? f.url : f.kind === 'video' ? f.url.replace(/\.[^.]+$/, '_first.png') : null;
     return `<div class="fcard ${A.sel.has(f.url) ? 'sel' : ''}">
       <input type="checkbox" data-sel="${esc(f.url)}" ${A.sel.has(f.url) ? 'checked' : ''}>
-      <div class="thumb" data-open="${esc(f.url)}" ${thumb ? `style="background-image:url('${thumb}')"` : ''}>${f.kind === 'audio' ? ic('music') : f.kind === 'video' ? ic('play') : ''}</div>
+      <div class="thumb" data-open="${esc(f.url)}" ${thumb ? `data-st="background-image:url('${thumb}')"` : ''}>${f.kind === 'audio' ? ic('music') : f.kind === 'video' ? ic('play') : ''}</div>
       <div class="meta"><b title="${esc(f.name)}">${esc(f.name)}</b>${esc(f.email)} · ${f.folder}<br>${fmtBytes(f.size)} · ${fmtDate(f.mtime)}</div>
     </div>`;
   }).join('') || '<p class="note">Nenhum arquivo.</p>';
@@ -570,7 +570,7 @@ async function deleteFiles(urls) {
 async function loadSettings() {
   const s = await api('/api/admin/settings');
   if (!A.models.length) A.models = await api('/api/admin/models');
-  $('#setLimits').innerHTML = limitsInputs(s.default_limits) + `<div style="grid-column: span 2">${modelChecks(s.default_limits.models)}</div>`;
+  $('#setLimits').innerHTML = limitsInputs(s.default_limits) + `<div data-st="grid-column: span 2">${modelChecks(s.default_limits.models)}</div>`;
   $('#setTokenRate').value = s.token_rate;
   $('#setLang').value = s.default_lang || 'en';
   const hint = () => { const r = +$('#setTokenRate').value || 0; $('#setTokenHint').textContent = r ? `1 token = US$ ${(1 / r).toFixed(4)} · um vídeo de US$ 0,50 = ${Math.round(0.5 * r)} tokens` : ''; };
@@ -601,7 +601,7 @@ async function loadBranding() {
   $('#brTagline').value = BR.draft.tagline || '';
   $('#brName').oninput = (e) => { BR.draft.app_name = e.target.value; previewBranding(); };
   $('#brTagline').oninput = (e) => { BR.draft.tagline = e.target.value; previewBranding(); };
-  $('#brThemes').innerHTML = Object.entries(BR.data.themes).map(([k, t]) => `<button class="br-theme" data-theme="${k}" style="--a:${t.accent};--b:${t.accent2};--bg:${t.bg}">
+  $('#brThemes').innerHTML = Object.entries(BR.data.themes).map(([k, t]) => `<button class="br-theme" data-theme="${k}" data-st="--a:${t.accent};--b:${t.accent2};--bg:${t.bg}">
     <span class="sw"><i></i><i></i><i></i></span><b>${esc(t.label)}</b></button>`).join('');
   document.querySelectorAll('[data-theme]').forEach((b) => { b.onclick = () => { BR.draft.theme = b.dataset.theme; BR.draft.accent = BR.draft.accent2 = BR.draft.bg = null; previewBranding(); }; });
   [['brAccent', 'accent'], ['brAccent2', 'accent2'], ['brBg', 'bg']].forEach(([id, k]) => {
@@ -689,7 +689,7 @@ async function ensureGroups() {
 }
 
 const permLabel = (k) => G.data?.permissions.find((p) => p.key === k)?.label || k;
-const groupTag = (g) => `<span class="tag gtag" style="--g:${esc(g.color)}" title="${g.source === 'microsoft' ? 'Atribuído pela Microsoft' : 'Atribuído no painel'}">${g.source === 'microsoft' ? ic('cloud') : ''}${esc(g.name)}</span>`;
+const groupTag = (g) => `<span class="tag gtag" data-st="--g:${esc(g.color)}" title="${g.source === 'microsoft' ? 'Atribuído pela Microsoft' : 'Atribuído no painel'}">${g.source === 'microsoft' ? ic('cloud') : ''}${esc(g.name)}</span>`;
 
 function limitSummary(lim, budgetTok) {
   const parts = lim.budget_usd != null ? [`Verba US$ ${lim.budget_usd}${lim.budget_split ? ' dividida' : '/pessoa'} = ${Number(budgetTok || 0).toLocaleString(LOC)} tokens/pessoa`] : [];
@@ -706,7 +706,7 @@ async function loadGroups() {
   $('#groupsList').innerHTML = G.data.groups.length ? G.data.groups.map((g) => {
     const ms = g.members.filter((m) => m.source === 'microsoft').length;
     const perms = Object.entries(g.permissions).filter(([k, v]) => v && !k.startsWith('node_')).map(([k]) => `<span class="tag ${k === 'admin' ? 'admin' : 'ok'}">${esc(permLabel(k))}</span>`).join('') || '<span class="tag off">nenhuma permissão</span>';
-    return `<div class="gcard" style="--g:${esc(g.color)}">
+    return `<div class="gcard" data-st="--g:${esc(g.color)}">
       <div class="gcard-head"><span class="gdot"></span><b>${esc(g.name)}</b>
         <small>${g.members.length} membro(s)${ms ? ` · ${ms} via Microsoft` : ''}</small>
         <span class="row-actions"><button class="btn small ghost" data-gedit="${g.id}">Editar</button><button class="btn small ghost" data-gdel="${g.id}" title="Excluir grupo" aria-label="Excluir grupo">${ic('trash')}</button></span></div>

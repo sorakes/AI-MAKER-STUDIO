@@ -61,7 +61,7 @@ function renderUserMenu() {
   const n = (v) => Math.round(v).toLocaleString(LOC);
   // velocímetro: arco de 180° preenchido conforme o uso
   const arc = 37.7; // comprimento do semicírculo r=12
-  const gauge = `<svg class="ug-gauge" viewBox="0 0 30 17" aria-hidden="true"><path d="M3 15a12 12 0 0 1 24 0" class="t"/><path d="M3 15a12 12 0 0 1 24 0" class="v" style="stroke-dasharray:${(pct / 100) * arc} ${arc}"/><line x1="15" y1="15" x2="${15 + 9 * Math.cos(Math.PI * (1 - pct / 100))}" y2="${15 - 9 * Math.sin(Math.PI * (1 - pct / 100))}" class="n"/></svg>`;
+  const gauge = `<svg class="ug-gauge" viewBox="0 0 30 17" aria-hidden="true"><path d="M3 15a12 12 0 0 1 24 0" class="t"/><path d="M3 15a12 12 0 0 1 24 0" class="v" data-st="stroke-dasharray:${(pct / 100) * arc} ${arc}"/><line x1="15" y1="15" x2="${15 + 9 * Math.cos(Math.PI * (1 - pct / 100))}" y2="${15 - 9 * Math.sin(Math.PI * (1 - pct / 100))}" class="n"/></svg>`;
   box.innerHTML = `
     <button class="hud-pill um-usage ${lvl}" id="umUsage" title="${tmax == null ? `${n(tok)} tokens usados este mês (sem limite)` : `${n(tok)} de ${n(tmax)} tokens usados este mês · restam ${n(Math.max(0, tmax - tok))}`}">
       ${gauge}
@@ -72,7 +72,7 @@ function renderUserMenu() {
       <div class="um-head"><b>${esc(me.name || me.email)}</b><small>${esc(me.email)}</small></div>
       <div class="section-label"><span>Uso deste mês</span></div>
       ${lim.tokens_month == null ? `<div class="um-row"><span>Tokens usados</span><b>${fmtTok(tok)}</b></div>`
-        : `<div class="um-row"><span>Tokens</span><b>${Math.round(tok).toLocaleString(LOC)} / ${fmtTok(lim.tokens_month)}</b></div><div class="um-bar"><i style="width:${Math.min(100, (tok / Math.max(1, lim.tokens_month)) * 100)}%"></i></div>`}
+        : `<div class="um-row"><span>Tokens</span><b>${Math.round(tok).toLocaleString(LOC)} / ${fmtTok(lim.tokens_month)}</b></div><div class="um-bar"><i data-st="width:${Math.min(100, (tok / Math.max(1, lim.tokens_month)) * 100)}%"></i></div>`}
       <div class="um-row"><span>Espaço</span><b>${fmtBytes(me.storage_bytes)}${lim.storage_mb != null ? ` / ${lim.storage_mb} MB` : ''}</b></div>
       <label class="um-lang"><span>Idioma</span><select id="umLang" data-noi18n>${Object.entries(I18N.LANGS).map(([k, v]) => `<option value="${k}" ${k === I18N.lang ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
       <div class="um-actions">

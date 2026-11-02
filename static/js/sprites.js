@@ -54,7 +54,7 @@ function charGenBody(n) {
     </details>
     <div class="cv-refs-sum ${refs.length ? '' : 'warn'}">${ic(refs.length ? 'check' : 'alert')}
       <span>${refs.length ? `${refs.length} referência(s) · <b>todas vão em todas as posições</b>, junto com a frente` : 'Sem fotos: a frente é criada só pela descrição e vira a referência das outras 7. Para roupa/logo exatos, solte fotos no canvas, dê nome e ligue na porta <b>R</b>.'}</span></div>
-    ${refs.length ? `<div class="cv-reflist">${refs.slice(0, 10).map((r, i) => `<div><i style="background-image:url('${r.url}')"></i><span>image ${i + 2}: <b>${esc(r.note || 'referência')}</b></span></div>`).join('')}</div>` : ''}
+    ${refs.length ? `<div class="cv-reflist">${refs.slice(0, 10).map((r, i) => `<div><i data-st="background-image:url('${r.url}')"></i><span>image ${i + 2}: <b>${esc(r.note || 'referência')}</b></span></div>`).join('')}</div>` : ''}
     ${refsBlock(n, 'Ou envie fotos direto aqui (o nome do arquivo vira a nota).')}
     <div class="cv-row2">
       ${field('Modelo (aceita referências)', `<select data-k="model"><option value="auto">Automático</option>${models.map((m) => opt(m.id, n.model, esc(m.label))).join('')}</select>`)}
@@ -301,7 +301,7 @@ function sheetBody(n) {
   return `
     ${previewBlock(n, { placeholder: { icon: 'dashboard', text: 'A spritesheet aparece aqui' } })}
     ${turnViewer(n)}
-    <div class="cv-sheet-strip">${incoming(n.id).map((s) => `<i style="${frameOf(s) ? `background-image:url('${frameOf(s)}')` : ''}" title="${esc(s.name)}"></i>`).join('') || '<span class="cv-side-note">Ligue as posições aqui</span>'}</div>
+    <div class="cv-sheet-strip">${incoming(n.id).map((s) => `<i data-st="${frameOf(s) ? `background-image:url('${frameOf(s)}')` : ''}" title="${esc(s.name)}"></i>`).join('') || '<span class="cv-side-note">Ligue as posições aqui</span>'}</div>
     <div class="cv-row4">
       ${field('Colunas', `<select data-k="cols">${[0, 2, 3, 4, 8].map((c) => opt(c, n.cols, c ? c : 'auto')).join('')}</select>`)}
       ${field('Célula', `<select data-k="cell">${[256, 384, 512, 768].map((c) => opt(c, n.cell, `${c}px`)).join('')}</select>`)}
@@ -448,7 +448,7 @@ function saveBody(n) {
     <div class="sv-head">${a?.saved ? `<span class="cv-chip">${ic('check')} salvo ${fmtDate(a.saved_at)}</span>` : '<span class="cv-chip warn">ainda não salvo</span>'}${a?.saved && dirty ? '<span class="cv-chip warn">alterações não salvas</span>' : ''}</div>
     ${g ? `<div class="cv-asset-info"><b>${esc(g.name)}</b><p>${GEN_KIND[g.type] === 'character' ? 'Personagem' : 'Produto'} · ${chosen.length} de ${items.length} imagem(ns) selecionada(s)</p></div>`
       : '<div class="cv-error">' + ic('alert') + '<span>Ligue aqui as posições de um Personagem/Produto.</span></div>'}
-    <div class="sv-grid">${items.map((x) => `<button class="sv-item ${(n.excluded || []).includes(x.node.id) ? 'off' : ''} ${x.url === cover ? 'cover' : ''}" data-node="${x.node.id}" style="background-image:url('${x.url}')" title="Clique: incluir/tirar · duplo clique: capa">
+    <div class="sv-grid">${items.map((x) => `<button class="sv-item ${(n.excluded || []).includes(x.node.id) ? 'off' : ''} ${x.url === cover ? 'cover' : ''}" data-node="${x.node.id}" data-st="background-image:url('${x.url}')" title="Clique: incluir/tirar · duplo clique: capa">
       <span>${esc(x.label || '')}</span>${x.url === cover ? `<i>${ic('star')}</i>` : ''}</button>`).join('') || '<p class="cv-side-note">Nenhuma imagem pronta ligada.</p>'}</div>
     <p class="cv-side-note">Clique para incluir/tirar · <b>duplo clique</b> escolhe a capa (${ic('star')}).</p>
     <div class="cv-foot"><button class="btn primary" data-act="save" ${g && chosen.length ? '' : 'disabled'}>${ic('check-circle')} ${a?.saved ? 'Salvar alterações' : `Salvar ${g && GEN_KIND[g.type] === 'product' ? 'produto' : 'personagem'}`}</button></div>`;
@@ -516,7 +516,7 @@ function renderAssetPanel() {
     ${list.length ? `<div class="as-pgrid">${list.map((a) => {
       const img = a.cover || a.images.find((i) => i.use)?.url || a.images[0]?.url;
       return `<div class="as-pcard" draggable="true" data-asset="${a.id}" title="${ws === 'video' ? 'Arraste para o canvas: cria um nó Elenco' : 'Clique para abrir no canvas'}">
-        <span class="as-pthumb" ${img ? `style="background-image:url('${img}')"` : ''}>${img ? '' : ic(a.kind === 'character' ? 'user' : 'logo')}</span>
+        <span class="as-pthumb" ${img ? `data-st="background-image:url('${img}')"` : ''}>${img ? '' : ic(a.kind === 'character' ? 'user' : 'logo')}</span>
         <b>${esc(a.name)}</b><small>${a.kind === 'character' ? 'personagem' : 'produto'} · ${a.images.filter((i) => i.use).length} img</small></div>`;
     }).join('')}</div>` : `<p class="cv-side-note">${ws === 'video' ? 'Nada salvo ainda. Crie nas abas Personagens/Produtos e use o nó Salvar.' : 'Nada salvo ainda. Gere as posições e clique em Salvar no nó Salvar na biblioteca.'}</p>`}`;
   box.querySelectorAll('[data-asset]').forEach((c) => {

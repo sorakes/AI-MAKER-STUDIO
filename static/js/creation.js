@@ -73,7 +73,7 @@ function castBody(n) {
     return list.length ? `<optgroup label="${label}">${list.map((x) => opt(x.id, n.assetId, esc(x.name))).join('')}</optgroup>` : '';
   };
   return `
-    <div class="cv-cast-strip">${imgs.length ? imgs.slice(0, 4).map((u) => `<div style="background-image:url('${u}')"></div>`).join('')
+    <div class="cv-cast-strip">${imgs.length ? imgs.slice(0, 4).map((u) => `<div data-st="background-image:url('${u}')"></div>`).join('')
       : `<div class="empty">${ic('users')}<span>${a ? 'Salve o item na aba dele (nó Salvar)' : 'Escolha um personagem/produto salvo ou envie fotos'}</span></div>`}</div>
     ${field('Do estúdio', `<select data-k="assetId"><option value="">— manual (preencher aqui) —</option>${group('character', 'Personagens')}${group('product', 'Produtos')}</select>`)}
     ${a ? `<div class="cv-asset-info"><b>${esc(a.name)}</b><p>${esc(a.description || 'sem descrição')}</p>
