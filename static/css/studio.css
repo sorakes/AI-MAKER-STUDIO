@@ -1122,6 +1122,14 @@ label:has(> input[type=checkbox]) { flex-direction: row; flex-wrap: wrap; align-
 label:has(> input[type=checkbox]) > input[type=checkbox] { flex-shrink: 0; margin: 0; }
 label:has(> input[type=checkbox]) > span { min-width: 0; }
 .beta-tag { vertical-align: middle; }
+/* Selo BETA compacto em qualquer contêiner (flex em coluna, grid, botão): nunca estica, só o tamanho do texto */
+.beta-tag { flex: none; width: fit-content; max-width: max-content; min-width: 0; height: auto; align-self: center; justify-self: start; box-sizing: border-box; }
+.cv-content > .beta-tag { align-self: flex-start; margin-left: 0; }
+.cv-htext > small .beta-tag { margin-left: 6px; text-transform: none; }
+.cv-flabel .beta-tag { margin-left: 4px; }
+/* Dentro do botão verde: texto branco sobre fundo escuro translúcido (contraste legível) */
+.btn.primary .beta-tag { margin-left: 2px; color: #fff; border-color: rgba(255,255,255,.75); background: rgba(0,0,0,.28); }
+body.style-pixel .btn.primary .beta-tag { color: #04130d; border-color: rgba(4,19,13,.7); background: rgba(255,255,255,.35); }
 .vedit-check, .audio-toggle { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 6px; }
 
 /* Visualizador em modal (duplo clique em mídia): cabe em qualquer tela, sem vazar */
