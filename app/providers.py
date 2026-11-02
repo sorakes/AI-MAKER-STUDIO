@@ -4,6 +4,7 @@
 
 As keys ficam cifradas na tabela providers; só são decifradas na hora da chamada.
 """
+import base64
 import http.client
 import ipaddress
 import json
@@ -312,7 +313,7 @@ def openrouter_audio(model_id: str, messages: list[dict], *, audio: dict | None 
         raise ProviderError(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:300]}") from e
     except urllib.error.URLError as e:
         raise ProviderError(f"sem conexão: {e.reason}") from e
-    data = base64.b64decode("".join(chunks)) if chunks else b""
+    data = b"".join(base64.b64decode(c) for c in chunks)  # cada pedaço é base64 completo: decodifica um a um
     return data, "".join(text), float(usage.get("cost") or 0)
 
 
