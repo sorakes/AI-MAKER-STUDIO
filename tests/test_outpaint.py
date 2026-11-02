@@ -193,8 +193,8 @@ def test_inpaint_marking_never_leaks_into_the_result(me, ai_available, monkeypat
 
     def fake_ai(m, prompt, spec, refs):
         captured["refs"] = refs
-        with Image.open(storage.resolve(spec.ref_image_urls[0], me)) as marked:
-            return _data_url(marked.convert("RGB")), 0.02  # devolve a entrada marcada, sem trocar nada
+        with Image.open(storage.resolve(spec.ref_image_urls[-1], me)) as painted:  # a pintada é a última entrada
+            return _data_url(painted.convert("RGB")), 0.02  # devolve a entrada pintada, sem trocar nada
     monkeypatch.setattr(jobs, "_openrouter_image", fake_ai)
     url = _mine(me, color=(30, 120, 200))
     mask_img = _rect_mask((64, 48), (10, 10, 30, 30))

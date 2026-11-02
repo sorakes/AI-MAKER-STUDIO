@@ -509,6 +509,7 @@ async def _run(job: dict, user: dict, resume: bool = False):
                         rep["raw_url"] = storage.to_url(raw)
                         rep["ident"] = spec.local_op.get("ident")  # o que a visão identificou (ou None = fallback)
                         rep["input_mode"] = spec.local_op.get("input_mode", "marked")
+                        rep["images"] = spec.local_op.get("images") or []  # o que foi enviado ao modelo, na ordem
                         job["result"] = {"inpaint": rep}
                     if spec.composite and spec.gen == "inpaint" and spec.local_op.get("mask_url"):
                         # borda esfumada e cor ajustada ao entorno; fora da máscara dilatada, o original byte a byte

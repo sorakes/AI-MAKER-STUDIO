@@ -45,7 +45,8 @@ class InpaintRequest(BaseModel):
     reinforce: bool = False  # nova tentativa: a IA não mexeu na região na primeira vez
     # clean: original limpa como entrada (padrão); clean_mask: original + máscara como 2ª referência;
     # marked: original com a região em magenta (como antes). Só vale com a identificação; sem ela, usa marked.
-    input_mode: Literal["clean", "clean_mask", "marked"] = "clean"
+    input_mode: Literal["annotated", "clean", "clean_mask", "marked"] = "annotated"
+    fill_enclosed: bool = True  # contorno fechado vira região cheia (desligado: só o traço pintado)
 
 
 def pick(user: dict, choice) -> dict | None:
@@ -98,6 +99,12 @@ def is_removal(text: str) -> bool:
     return not t or bool(REMOVE_RE.search(t))
 
 
+# rótulo das 2 imagens enviadas ao modelo no inpaint (original limpa e pintada); a máscara não é enviada
+ANNOTATED_LABELS = "Image 1: original photo. Image 2: the same photo with the area to edit painted in magenta."
+NO_MARK = ("Do not reproduce the magenta paint, its outline or any marks in the result: it must look like a normal, "
+           "unmarked photo. Blend lighting, perspective and style with the surroundings.")
+
+
 def _phrase(value, limit: int = 80) -> str:
     """Texto curto vindo da identificação: uma linha, sem aspas, cortado."""
     s = " ".join(str(value or "").split()).strip(" \"'")
@@ -113,6 +120,19 @@ def inpaint_prompt(req: InpaintRequest, reinforce: bool = False, ident: dict | N
     text = req.prompt.strip()
     removal = is_removal(text)
     target = _phrase((ident or {}).get("target"))
+    if req.input_mode == "annotated":  # o modelo recebe 2 imagens (original e pintada) + este texto
+        tgt = target or "the object inside the magenta area of image 2"
+        surr = _phrase((ident or {}).get("surroundings")) or "the surrounding background"
+        if removal:
+            body = (f"{ANNOTATED_LABELS} Remove {tgt} from image 1 (the area painted in image 2). Fill the empty area "
+                    f"with {surr}, matching lighting, perspective and style.")
+        else:
+            body = f"{ANNOTATED_LABELS} Replace {tgt} in image 1 (the area painted in image 2) with: {text}."
+        body += " Keep everything else in image 1 exactly the same."
+        if reinforce:
+            body += (f" The previous attempt left {tgt} visible: it must be completely gone."
+                     if removal else " The previous attempt barely changed the area: it must visibly change.")
+        return f"{body} {NO_MARK}"
     if target:
         surr = _phrase((ident or {}).get("surroundings")) or "the surrounding background"
         if req.input_mode == "marked":
@@ -159,6 +179,35 @@ def _png_url(img: Image.Image) -> str:
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def fill_enclosed(mask: Image.Image) -> Image.Image:
+    """Traço fechado vira região cheia: o que não é alcançável da borda do quadro (e não está pintado) é o
+    interior do contorno e entra na máscara. Traço aberto ou rabisco cheio não muda.
+
+    Trabalha em escala reduzida (até 512 px) e amplia de volta. Antes, fecha pequenas falhas do contorno com
+    fechamento morfológico de ~1% da dimensão, para um anel com falha ainda preencher."""
+    from PIL import ImageChops, ImageDraw
+    base = mask.convert("L").point(lambda v: 255 if v > 127 else 0)
+    if not base.getbbox():
+        return base
+    W, H = base.size
+    step = max(1, -(-max(W, H) // 512))  # ceil: a escala de trabalho tem no máximo 512 px
+    sw, sh = -(-W // step), -(-H // step)
+    small = base.resize((sw, sh), Image.Resampling.BOX).point(lambda v: 255 if v > 0 else 0)  # bloco com pintura = pintado
+    r = max(1, round(0.01 * max(sw, sh)))
+    closed = small.filter(ImageFilter.MaxFilter(2 * r + 1)).filter(ImageFilter.MinFilter(2 * r + 1))
+    free = closed.point(lambda v: 0 if v else 255)  # 255 = livre (não pintado e não fechado)
+    for x in range(sw):  # bordas do quadro: cada componente livre que toca a borda vira 'de fora' (128)
+        for y in (0, sh - 1):
+            if free.getpixel((x, y)) == 255:
+                ImageDraw.floodfill(free, (x, y), 128)
+    for y in range(sh):
+        for x in (0, sw - 1):
+            if free.getpixel((x, y)) == 255:
+                ImageDraw.floodfill(free, (x, y), 128)
+    interior = free.point(lambda v: 255 if v == 255 else 0)  # o que sobrou livre não alcançou a borda
+    return ImageChops.lighter(base, interior.resize((W, H), Image.Resampling.NEAREST))
 
 
 def outline_image(src: Image.Image, mask: Image.Image) -> Image.Image:
@@ -239,6 +288,18 @@ def marked_image(src: Image.Image, mask: Image.Image) -> Image.Image:
     """Original com a região pintada em magenta sólido (entrada da IA no inpaint)."""
     base = src.convert("RGB")
     return Image.composite(Image.new("RGB", base.size, MARK), base, mask.convert("L"))
+
+
+def annotated_image(src: Image.Image, mask: Image.Image) -> Image.Image:
+    """Imagem 2 do inpaint: a mesma foto com a região destacada em magenta semitransparente e contorno sólido."""
+    from PIL import ImageChops
+    base = src.convert("RGB")
+    m = mask.convert("L").resize(base.size).point(lambda v: 255 if v > 127 else 0)
+    tinted = Image.composite(Image.blend(base, Image.new("RGB", base.size, MARK), 0.45), base, m)
+    r = max(2, max(base.size) // 250)
+    inner = m.filter(ImageFilter.GaussianBlur(r)).point(lambda v: 255 if v >= 250 else 0)
+    edge = ImageChops.subtract(m, inner)
+    return Image.composite(Image.new("RGB", base.size, MARK), tinted, edge)
 
 
 def keep_for_inpaint(mask: Image.Image) -> Image.Image:

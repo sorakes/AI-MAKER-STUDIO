@@ -3,7 +3,8 @@ from app import outpaint as o
 
 
 def _req(text):
-    return o.InpaintRequest(source_url="/files/1/x.png", mask="data:image/png;base64,AA==", prompt=text)
+    # estes testes cobrem o prompt de marcação magenta (modo 'marked'); o padrão agora é 'annotated'
+    return o.InpaintRequest(source_url="/files/1/x.png", mask="data:image/png;base64,AA==", prompt=text, input_mode="marked")
 
 
 def test_removal_intent_is_detected_in_portuguese_and_english():

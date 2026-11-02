@@ -56,7 +56,7 @@ def _vision(monkeypatch, payload):
     return calls
 
 
-def test_happy_path_sends_original_as_reference_and_never_the_annotated_image(env):
+def test_happy_path_sends_original_and_annotated_image_with_the_text(env):
     calls = _vision(env["monkeypatch"], {"edit_en": "Replace the red ball with a blue one.",
                                          "keep_en": "the bottle and the table", "notes_pt": []})
     r = env["client"].post("/api/image/regenerate-from-sketch", json=_body(env["source_url"]))
@@ -67,8 +67,11 @@ def test_happy_path_sends_original_as_reference_and_never_the_annotated_image(en
     job = env["started"][0]
     spec = job["spec"]
     assert spec["gen"] == "image" and spec["require_refs"] is True
-    assert spec["ref_image_urls"] == [env["source_url"]]  # a original é a referência
-    assert "QU5OT1RBVEVEX0ZSQU1FX1NFTlRfVE9fVklTSU9O" not in json.dumps(spec)  # o desenho não vai ao gerador
+    # o gerador recebe a original (imagem 1) e a imagem com as marcações (imagem 2), além do texto
+    assert len(spec["ref_image_urls"]) == 2 and spec["ref_image_urls"][0] == env["source_url"]
+    assert spec["ref_image_urls"][1].startswith("/files/")  # a imagem anotada guardada como arquivo oculto
+    assert spec["local_op"]["images"] == ["original", "desenho"]  # o registro do job mostra o que foi enviado
+    assert "Image 1: original photo. Image 2:" in spec["prompt"]
     assert "Replace the red ball with a blue one." in spec["prompt"]
     assert "NO drawn marks" in spec["prompt"]
     # a visão recebeu a imagem anotada (e só ela recebe o desenho)

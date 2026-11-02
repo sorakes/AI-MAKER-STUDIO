@@ -1128,7 +1128,8 @@ async function runEdit(n, { reinforce = false } = {}) {
         n.mask = null; save(); renderNode(n);
         return toast('A região pintada está vazia: pinte de novo antes de aplicar');
       }
-      job = await api('/api/image/inpaint', { node_id: n.id, name: n.name, source_url: src, mask: n.mask, prompt: n.prompt || '', model: n.model || 'auto', reinforce });
+      job = await api('/api/image/inpaint', { node_id: n.id, name: n.name, source_url: src, mask: n.mask, prompt: n.prompt || '', model: n.model || 'auto', reinforce,
+        fill_enclosed: n.mask_fill !== false });
     } else {
       job = await api('/api/image/outpaint', { node_id: n.id, name: n.name, source_url: src, aspect: n.aspect, anchor: n.anchor,
         prompt: n.prompt || '', model: n.model || 'auto' });

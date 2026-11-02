@@ -76,20 +76,26 @@ def plan_edit(req: SketchRequest) -> dict:
             "source": "regras"}
 
 
-def edit_prompt(edit_en: str, keep_en: str = "") -> str:
-    """Prompt do gerador: a imagem 1 é a ORIGINAL; nada de traços no resultado."""
+def edit_prompt(edit_en: str, keep_en: str = "", annotated: bool = False) -> str:
+    """Prompt do gerador: a imagem 1 é a ORIGINAL; nada de traços no resultado.
+
+    Com annotated, a imagem 2 é a mesma foto com as marcações desenhadas: rotulada, como guia, e nunca reproduzida."""
     keep = keep_en or "composition, framing, lighting, people, products and logos"
-    return (f"Edit image 1 (the ORIGINAL picture) and return the edited picture. Apply exactly these changes: {edit_en} "
+    labels = ("Image 1: original photo. Image 2: the same photo with the drawn marks showing where and how to edit. "
+              "Use the marks only as a guide. " if annotated else "Edit image 1 (the ORIGINAL picture) and return the edited picture. ")
+    return (f"{labels}Apply exactly these changes: {edit_en} "
             f"Keep everything else identical to image 1: {keep}. The result must be a clean photograph with NO drawn "
             "marks: no lines, arrows, circles, dots, rings, labels or annotations of any kind.")
 
 
-def build_request(req: SketchRequest, edit: dict) -> jobs.RenderRequest:
+def build_request(req: SketchRequest, edit: dict, annotated_url: str | None = None) -> jobs.RenderRequest:
     """Vira um render de imagem comum: mesmas cotas, permissões e fila do Gerar imagem.
 
-    require_refs: sem modelo que aceite a imagem original, falha em vez de gerar só com texto (perderia a cena).
-    """
-    prompt = edit_prompt(edit["edit_en"], edit.get("keep_en", ""))
+    O gerador recebe a original e, quando há, a imagem com as marcações (além do texto); a máscara/desenho não
+    vira imagem separada. require_refs: sem modelo que aceite a imagem original, falha em vez de gerar só com texto."""
+    prompt = edit_prompt(edit["edit_en"], edit.get("keep_en", ""), annotated=bool(annotated_url))
+    refs = [req.source_url, *([annotated_url] if annotated_url else []), *req.ref_image_urls]
     return jobs.RenderRequest(node_id=req.node_id, name=req.name, gen="image", model=req.model, prompt=prompt,
                               keyframe_prompt=prompt, aspect=req.aspect, quality=req.quality,
-                              ref_image_urls=[req.source_url, *req.ref_image_urls], require_refs=True)
+                              ref_image_urls=refs, require_refs=True,
+                              local_op={"images": ["original", "desenho"] if annotated_url else ["original"]})
