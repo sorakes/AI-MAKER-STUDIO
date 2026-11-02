@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, camera, db, extend, groups, lipsync, providers, sprites, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, camera, db, extend, groups, lipsync, providers, sprites, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -356,6 +356,40 @@ async def loop_video(req: extend.LoopRequest, user: dict = Depends(current_user)
         node_id=req.node_id, name=req.name, gen="loop", prompt="loop", keyframe_prompt="loop",
         duration=float(src["duration"]), ref_image_urls=[req.source_url],
         local_op={"kind": "loop", "mode": req.mode, "seconds": req.seconds}))
+
+
+@router.post("/video/transcribe")
+async def transcribe_video(req: subtitles.TranscribeRequest, user: dict = Depends(current_user)):
+    """Transcrição do áudio do vídeo (modelo de áudio barato). O resultado (segmentos) fica no job."""
+    src = await _video_source(req.source_url, user)
+    if not await asyncio.to_thread(extend.has_audio, src["path"]):
+        raise HTTPException(400, "O vídeo não tem trilha de áudio para transcrever")
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="transcribe", prompt="transcribe", keyframe_prompt="transcribe",
+        duration=float(src["duration"]), ref_image_urls=[req.source_url], local_op={"language": req.language}))
+
+
+@router.post("/video/subtitles")
+async def subtitles_video(req: subtitles.SubtitleRequest, user: dict = Depends(current_user)):
+    """Legendas queimadas no vídeo (estilo, posição, tamanho, cor) + .srt; tradução opcional do texto."""
+    src = await _video_source(req.source_url, user)
+    segs = [s.model_dump() for s in req.segments]
+    if req.import_text.strip():
+        segs = subtitles.parse_subs(req.import_text)
+    try:
+        segs = subtitles.clean_segments(segs, src["duration"])
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if req.translate_to:
+        try:
+            segs = await asyncio.to_thread(subtitles.translate, segs, req.translate_to)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="subtitles", prompt="subtitles", keyframe_prompt="subtitles",
+        duration=float(src["duration"]), ref_image_urls=[req.source_url],
+        local_op={"segments": segs, "style": req.style, "position": req.position, "size": req.size,
+                  "color": req.color, "highlight": req.highlight}))
 
 
 @router.post("/direction/interpret")

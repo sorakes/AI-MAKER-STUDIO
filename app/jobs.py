@@ -17,7 +17,7 @@ import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from . import db, extend, lipsync, media, montage, outpaint, promptgen, providers, registry, relight, storage, upscale, usage
+from . import db, extend, lipsync, media, montage, outpaint, promptgen, providers, registry, relight, storage, subtitles, upscale, usage
 from .auth import CURRENT, public_user
 
 JOBS: dict[str, dict] = {}
@@ -62,6 +62,10 @@ def plan(user: dict, r: RenderRequest) -> list[dict]:
     if r.gen == "upscale":  # IA com referências se houver modelo; senão upscale simples local
         m = upscale.pick(user, r.model)
         return [_step("image", m or upscale.LOCAL, "Upscale criativo" if m else "Upscale simples")]
+    if r.gen == "transcribe":  # áudio -> texto: modelo de áudio do OpenRouter (o mais barato com entrada de áudio)
+        return [_step("text", subtitles.STT_LOCAL, "Transcrição")]
+    if r.gen == "subtitles":  # legendas queimadas com ffmpeg (local)
+        return [_step("video", relight.local_model("Legendas"), "Legendas")]
     if r.gen == "loop":  # loop sem IA: ida e volta ou crossfade, sempre local (ffmpeg)
         return [_step("video", relight.local_model("Loop (sem IA)"), "Loop (sem IA)")]
     if r.gen == "lipsync":  # lip sync real se houver modelo habilitado; senão animação simples com o áudio
@@ -222,7 +226,8 @@ def prepare(user: dict, r: RenderRequest) -> dict:
         for p in need:
             if not perms.get(p, True):
                 raise HTTPException(403, f"Sem permissão para {labels[p]}. Fale com o administrador.")
-    models = {s["model"]: (upscale.LOCAL if s["provider"] == "local" else registry.get(s["model"])) for s in steps}
+    models = {s["model"]: (upscale.LOCAL if s["provider"] == "local" else subtitles.STT_LOCAL if s["model"] == subtitles.STT_ID
+                           else registry.get(s["model"])) for s in steps}
     for s in steps:
         s["est"] = registry.estimate(models[s["model"]], r.duration if s["kind"] == "video" else 1)
     est = sum(s["est"] for s in steps)
@@ -375,7 +380,8 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 if st["kind"] == "image":
                     prev_image = st["output"]
                 continue
-            m = upscale.LOCAL if st["model"] == upscale.LOCAL_ID else await registry.aget(st["model"])
+            m = (upscale.LOCAL if st["model"] == upscale.LOCAL_ID else subtitles.STT_LOCAL if st["model"] == subtitles.STT_ID
+                 else await registry.aget(st["model"]))
             if not m:
                 raise RuntimeError("modelo removido do painel durante o render")
             st["status"] = "running"
@@ -421,7 +427,15 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 prompt, caption = await asyncio.to_thread(promptgen.adapt_to_frame, spec.prompt, prev_image)
                 job["spec"]["prompt"], job["first_frame_caption"] = prompt, caption
             try:
-                if spec.gen == "lipsync" and m["provider"] == "openrouter":  # lip sync real (gancho do provedor)
+                if spec.gen == "transcribe":  # áudio do vídeo -> WAV -> modelo de áudio -> segmentos (guardados no job)
+                    job["detail"] = "transcrevendo o áudio"
+                    video = storage.resolve(spec.ref_image_urls[0], user)
+                    wav = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_audio.wav"
+                    await asyncio.to_thread(subtitles.wav_from_video, video, wav)
+                    job["result"] = await asyncio.to_thread(subtitles.transcribe_wav, wav, spec.local_op.get("language", ""))
+                    cost = registry.estimate(m, 1)
+                    st["output"], url = None, None
+                elif spec.gen == "lipsync" and m["provider"] == "openrouter":  # lip sync real (gancho do provedor)
                     job["detail"] = "gerando a fala"
                     data = await asyncio.to_thread(lipsync.remote, m, spec.ref_image_urls[0],
                                                    spec.local_op.get("audio_url"), spec.keyframe_prompt or spec.prompt)
@@ -436,9 +450,12 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     url = None
                 elif m["provider"] == "local":  # upscale/relight/estilo simples: Pillow, sem provedor
                     src = storage.resolve(spec.ref_image_urls[0], user)
-                    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}{'.mp4' if spec.gen in ('lipsync', 'loop') else '.png'}"
+                    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}{'.mp4' if spec.gen in ('lipsync', 'loop', 'subtitles') else '.png'}"
                     if spec.gen == "upscale":
                         await asyncio.to_thread(upscale.resize_file, src, spec.upscale_factor, dest)
+                    elif spec.gen == "subtitles":  # queima as legendas e grava o .srt ao lado do vídeo
+                        srt = await asyncio.to_thread(subtitles.burn, src, spec.local_op, dest)
+                        job["result"] = {"srt_url": storage.to_url(srt)}
                     elif spec.gen == "loop":
                         await asyncio.to_thread(extend.apply_loop, spec.local_op, src, dest)
                     elif spec.gen == "lipsync":
@@ -493,7 +510,7 @@ async def _run(job: dict, user: dict, resume: bool = False):
             await asave(job)
         job["output"] = job["steps"][-1]["output"]
         job["keyframe"] = prev_image
-        job["media"] = await asyncio.to_thread(media.describe, storage.resolve(job["output"], user))
+        job["media"] = await asyncio.to_thread(media.describe, storage.resolve(job["output"], user)) if job["output"] else None
         job["status"], job["progress"], job["detail"] = "done", 100, None
     except Exception as e:  # noqa: BLE001 - a mensagem vai para o nó
         job["status"], job["error"], job["detail"] = "error", str(e)[:600], None

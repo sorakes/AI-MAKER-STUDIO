@@ -1040,3 +1040,8 @@ html.i18n-wait body { visibility: hidden; }
 .mask-size { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--muted); }
 .mask-size input[type=range] { width: 110px; accent-color: var(--accent); }
 
+/* Legendas: editor de segmentos */
+.subs-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.subs-list { display: grid; gap: 6px; }
+.subs-row { display: grid; grid-template-columns: 5rem 5rem minmax(0, 1fr) auto; gap: 4px; align-items: center; }
+.subs-row input { min-width: 0; width: 100%; }

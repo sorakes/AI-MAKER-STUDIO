@@ -8,7 +8,7 @@ const cv = { nodes: [], edges: [], pan: { x: 60, y: 40 }, zoom: 0.9, sel: null, 
 
 // Cada área tem o próprio canvas e a própria paleta de nós.
 const WS_PALETTE = {
-  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'extend', 'review', 'montage'],
+  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'extend', 'subs', 'review', 'montage'],
   character: ['chargen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
   product: ['prodgen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
 };
@@ -449,6 +449,12 @@ const PALETTE = {
     how: 'Ligue a imagem do personagem na entrada I → envie o áudio (ou escreva o texto) → escolha o formato → Gerar fala. Sem lip sync real neste provedor, o resultado é uma animação simples com o áudio.',
     make: (pos) => newSpeak(pos),
   },
+  subs: {
+    icon: 'film', title: 'Legendas', tag: 'vídeo → vídeo',
+    what: 'Transcreve o áudio do vídeo (ou usa legendas importadas), deixa você editar os tempos e o texto e queima as legendas com estilo. Também exporta o .srt.',
+    how: 'Ligue o vídeo na entrada → Transcrever áudio (ou importe um .srt/.vtt) → edite as legendas → escolha o estilo → Gerar legendas.',
+    make: (pos) => newSubs(pos),
+  },
   edit: {
     icon: 'sparkles', title: 'Expandir / editar região', tag: 'quadro maior ou região trocada',
     what: 'Expande a imagem para outro aspecto (a IA preenche as bordas) ou troca uma região pintada, mantendo o resto igual.',
@@ -544,7 +550,7 @@ function frameOf(n) {
   if (n.type === 'transition') return n.output?.last_frame || null;
   if (n.type === 'frame') return extractedFrame(n);
   if (['upscale', 'relight', 'edit'].includes(n.type)) return n.output?.url || null;
-  if (n.type === 'speak' || n.type === 'extend') return n.output?.last_frame || null;
+  if (n.type === 'speak' || n.type === 'extend' || n.type === 'subs') return n.output?.last_frame || null;
   if (n.type === 'review') return frameOf(incoming(n.id)[0]);
   if (n.type === 'media') return n.media.kind === 'video' ? n.media.last_frame : n.media.url;
   if (n.type === 'shot') return n.output?.last_frame || (n.output?.kind === 'image' ? n.output.url : null);
@@ -556,7 +562,7 @@ function frameOf(n) {
 function videoOf(n) {
   if (n?.type === 'review') return videoOf(incoming(n.id)[0]);
   if (n?.type === 'media' && n.media.kind === 'video') return n.media.url;
-  if (n?.type === 'shot' || n?.type === 'transition' || n?.type === 'extend') return n.output?.kind === 'video' ? n.output.url : null;
+  if (n?.type === 'shot' || n?.type === 'transition' || n?.type === 'extend' || n?.type === 'subs') return n.output?.kind === 'video' ? n.output.url : null;
   return null;
 }
 
@@ -807,6 +813,7 @@ const KIND = {
   edit: { label: 'Expandir / editar', icon: 'sparkles' },
   speak: { label: 'Fala', icon: 'user' },
   extend: { label: 'Estender / loop', icon: 'video' },
+  subs: { label: 'Legendas', icon: 'film' },
 };
 
 function nodeEl(n) {
@@ -830,7 +837,7 @@ function nodeEl(n) {
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
       <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
-    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, extend: extendBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
+    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, subs: subsBody, extend: extendBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
       ? '<span class="cv-port in" data-port="a" title="Entrada A: vídeo ou imagem de onde a transição sai"><i>A</i></span><span class="cv-port in port-b" data-port="b" title="Entrada B: vídeo ou imagem onde a transição chega"><i>B</i></span>'
       : n.type === 'speak'
@@ -864,6 +871,7 @@ function nodeEl(n) {
   if (n.type === 'relight') bindRelight(el, n);
   if (n.type === 'edit') bindEdit(el, n);
   if (n.type === 'speak') bindSpeak(el, n);
+  if (n.type === 'subs') bindSubs(el, n);
   if (n.type === 'extend') bindExtend(el, n);
   if (n.type === 'review') bindReview(el, n);
   if (n.type === 'brief') bindBrief(el, n);
@@ -1139,6 +1147,165 @@ async function runSpeak(n) {
   renderNode(n);
   save();
   toast(job.mode === 'local' ? `${n.name}: sem lip sync real, animação simples` : `${n.name}: gerando a fala`);
+  return watchJob(n);
+}
+
+// ---------------- Legendas (vídeo → vídeo) ----------------
+
+const SUBS_STYLES = [['classic', 'Clássica'], ['karaoke', 'Karaokê (palavra a palavra)'], ['shorts', 'Shorts (amarela, caixa alta)'], ['minimal', 'Mínima']];
+const SUBS_POSITIONS = [['bottom', 'Embaixo'], ['middle', 'No meio'], ['top', 'Em cima']];
+const SUBS_SIZES = [['small', 'Pequena'], ['medium', 'Média'], ['large', 'Grande']];
+const SUBS_LANGS = [['', 'Sem tradução'], ['en', 'Inglês'], ['pt', 'Português'], ['es', 'Espanhol']];
+
+function newSubs(pos) {
+  return { id: uid('sub'), type: 'subs', name: t('Legendas'), segments: [], style: 'classic', position: 'bottom',
+    size: 'medium', color: '#ffffff', highlight: '#facc15', translate: '', status: 'idle', output: null, takes: [],
+    jobId: null, result: null, ...pos };
+}
+
+function subsBody(n) {
+  const src = videoOf(incoming(n.id)[0]);
+  const busy = n.status === 'running';
+  const rows = (n.segments || []).map((s, i) => `
+    <div class="subs-row" data-i="${i}">
+      <input type="number" min="0" step="0.1" value="${s.start}" data-seg="start" aria-label="Início (segundos)">
+      <input type="number" min="0" step="0.1" value="${s.end}" data-seg="end" aria-label="Fim (segundos)">
+      <input type="text" value="${esc(s.text)}" data-seg="text" maxlength="300" aria-label="Texto da legenda">
+      <button type="button" class="cv-hbtn" data-act="subs-del" title="Remover legenda" aria-label="Remover legenda">${ic('x')}</button>
+    </div>`).join('');
+  const srtLink = n.result?.srt_url ? `<a class="btn small ghost" href="${esc(n.result.srt_url)}" download>${ic('download')} Baixar .srt</a>` : '';
+  return `
+    ${previewBlock(n, { placeholder: { icon: 'video', text: src ? '' : 'Ligue um vídeo na entrada' } })}
+    ${src ? '' : `<div class="cv-meta"><span class="err">${ic('alert')} Ligue um vídeo na entrada</span></div>`}
+    <div class="subs-actions">
+      <button class="btn small ghost" data-act="subs-transcribe" ${busy || !src ? 'disabled' : ''}>${ic('music')} Transcrever áudio</button>
+      <label class="btn small ghost cv-upload">${ic('upload')} Importar .srt/.vtt<input type="file" accept=".srt,.vtt" class="sr-only" data-role="subs-import"></label>
+    </div>
+    <div class="cv-meta"><span>Transcrição com modelo de áudio barato. Sem ele, escreva ou importe as legendas.</span></div>
+    <div class="subs-list" role="group" aria-label="Legendas">${rows || '<div class="cv-meta"><span>Sem legendas ainda.</span></div>'}</div>
+    <div class="subs-actions">
+      <button class="btn small ghost" data-act="subs-add" ${busy ? 'disabled' : ''}>${ic('plus')} Adicionar legenda</button>
+    </div>
+    ${field('Estilo', `<select data-k="style">${SUBS_STYLES.map(([v, l]) => opt(v, n.style, l)).join('')}</select>`)}
+    ${field('Posição', `<select data-k="position">${SUBS_POSITIONS.map(([v, l]) => opt(v, n.position, l)).join('')}</select>`)}
+    ${field('Tamanho', `<select data-k="size">${SUBS_SIZES.map(([v, l]) => opt(v, n.size, l)).join('')}</select>`)}
+    ${field('Cor do texto', `<input type="color" data-k="color" value="${esc(n.color)}">`)}
+    ${n.style === 'karaoke' ? field('Cor do destaque', `<input type="color" data-k="highlight" value="${esc(n.highlight)}">`) : ''}
+    ${field('Traduzir legendas', `<select data-k="translate">${SUBS_LANGS.map(([v, l]) => opt(v, n.translate, l)).join('')}</select>`)}
+    <div class="cv-meta"><span>A tradução usa o modelo de texto barato.</span></div>
+    ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
+    ${srtLink ? `<div class="cv-meta">${srtLink}</div>` : ''}
+    <div class="cv-foot">
+      <button class="btn primary" data-act="subs-run" ${busy || !src || !(n.segments || []).length ? 'disabled' : ''}>${ic('film')} ${n.output ? 'Gerar de novo' : 'Gerar legendas'}</button>
+    </div>`;
+}
+
+function bindSubs(el, n) {
+  el.querySelectorAll('[data-k]').forEach((inp) => inp.addEventListener('change', () => {
+    n[inp.dataset.k] = inp.value;
+    save();
+    if (inp.dataset.k === 'style') renderNode(n);
+  }));
+  el.querySelectorAll('.subs-row [data-seg]').forEach((inp) => inp.addEventListener('change', () => {
+    const seg = n.segments[+inp.closest('.subs-row').dataset.i];
+    const k = inp.dataset.seg;
+    if (!seg) return;
+    seg[k] = k === 'text' ? inp.value : +inp.value;
+    save();
+  }));
+  el.querySelector('[data-act=subs-add]')?.addEventListener('click', () => {
+    const last = n.segments[n.segments.length - 1];
+    const start = last ? last.end : 0;
+    n.segments.push({ start, end: start + 2, text: '' });
+    save();
+    renderNode(n);
+  });
+  el.querySelectorAll('[data-act=subs-del]').forEach((b) => b.addEventListener('click', () => {
+    n.segments.splice(+b.closest('.subs-row').dataset.i, 1);
+    save();
+    renderNode(n);
+  }));
+  el.querySelector('[data-role=subs-import]')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      if (file.size > 400000) return toast('Arquivo grande demais (máx. 400 KB)');
+      const segs = parseSubsText(await file.text());  // só para o editor; o servidor valida ao gerar
+      if (!segs.length) return toast('Nenhuma legenda encontrada no arquivo');
+      n.segments = segs;
+      save();
+      renderNode(n);
+      toast(`${segs.length} legendas importadas`);
+    } catch (err) { toast(err.message); }
+  });
+  el.querySelector('[data-act=subs-transcribe]')?.addEventListener('click', () => runTranscribe(n).catch((err) => toast(err.message)));
+  el.querySelector('[data-act=subs-run]')?.addEventListener('click', () => runSubs(n).catch((err) => toast(err.message)));
+}
+
+const subsTime = (s) => s.trim().replace(',', '.').split(':').map(Number).reduce((acc, v) => acc * 60 + v, 0);
+
+// Lê .srt/.vtt no navegador (só para mostrar no editor).
+function parseSubsText(text) {
+  return text.replace(/\r/g, '').split(/\n\s*\n/).flatMap((block) => {
+    const lines = block.split('\n');
+    const i = lines.findIndex((l) => l.includes('-->'));
+    if (i < 0) return [];
+    const [a, b] = lines[i].split('-->').map((x) => x.trim().split(/\s+/)[0]);
+    const start = subsTime(a);
+    const end = subsTime(b);
+    const body = lines.slice(i + 1).join(' ').replace(/<[^>]+>/g, '').trim();
+    return Number.isFinite(start) && Number.isFinite(end) && body ? [{ start, end, text: body }] : [];
+  });
+}
+
+// Transcrição: áudio do vídeo -> modelo de áudio barato -> segmentos no editor.
+async function runTranscribe(n) {
+  const src = videoOf(incoming(n.id)[0]);
+  if (!src) return toast('Ligue um vídeo na entrada');
+  if (n.status === 'running') return;
+  let job;
+  try {
+    job = await api('/api/video/transcribe', { node_id: n.id, name: n.name, source_url: src, language: '' });
+  } catch (err) {
+    Object.assign(n, { status: 'error', error: err.message });
+    renderNode(n);
+    throw err;
+  }
+  Object.assign(n, { jobId: job.id, status: 'running', progress: 0, error: null, cost: null, stage: 'transcrevendo' });
+  renderNode(n);
+  save();
+  toast(`${n.name}: transcrevendo o áudio`);
+  await watchJob(n);
+  if (n.status !== 'done') return;
+  const segs = n.result?.segments || [];
+  if (!segs.length) return toast('Nenhuma fala encontrada no áudio');
+  n.segments = segs;
+  save();
+  renderNode(n);
+  toast(`${segs.length} legendas transcritas`);
+}
+
+// Legendas queimadas no vídeo (ffmpeg) + .srt.
+async function runSubs(n) {
+  const src = videoOf(incoming(n.id)[0]);
+  if (!src) return toast('Ligue um vídeo na entrada');
+  if (!n.segments?.length) return toast('Adicione ou transcreva as legendas');
+  if (n.status === 'running') return;
+  let job;
+  try {
+    job = await api('/api/video/subtitles', { node_id: n.id, name: n.name, source_url: src,
+      segments: n.segments.map(({ start, end, text }) => ({ start, end, text })), style: n.style, position: n.position,
+      size: n.size, color: n.color, highlight: n.highlight, translate_to: n.translate });
+  } catch (err) {
+    Object.assign(n, { status: 'error', error: err.message });
+    renderNode(n);
+    throw err;
+  }
+  Object.assign(n, { jobId: job.id, status: 'running', progress: 0, error: null, cost: null, stage: 'queimando as legendas' });
+  renderNode(n);
+  save();
+  toast(`${n.name}: queimando as legendas`);
   return watchJob(n);
 }
 
@@ -1795,7 +1962,7 @@ function watchJob(n) {
       const cur = j.steps.find((s) => s.status === 'running');
       n.stage = [cur ? `${cur.label} · ${cur.model_label}` : j.status, j.detail].filter(Boolean).join(' · ');
       if (j.status === 'done') {
-        Object.assign(n, { status: 'done', output: j.media, progress: 100, preview: null, cost: j.steps.reduce((t, s) => t + (s.cost || 0), 0) });
+        Object.assign(n, { status: 'done', output: j.media || n.output, result: j.result || null, progress: 100, preview: null, cost: j.steps.reduce((t, s) => t + (s.cost || 0), 0) });
         addTake(n, j.media);
         if (j.spec?.prompt && n.auto && n.gen !== 'image') n.auto.video_prompt = j.spec.prompt; // prompt já alinhado ao 1º frame real
         renderLibrary._sig = null;
