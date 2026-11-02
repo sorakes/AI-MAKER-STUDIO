@@ -380,16 +380,19 @@ async def subtitles_video(req: subtitles.SubtitleRequest, user: dict = Depends(c
         segs = subtitles.clean_segments(segs, src["duration"])
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+    translate_usd = 0.0
     if req.translate_to:
+        costs: list = []
         try:
-            segs = await asyncio.to_thread(subtitles.translate, segs, req.translate_to)
+            segs = await asyncio.to_thread(subtitles.translate, segs, req.translate_to, costs)
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
+        translate_usd = costs[0] if costs else 0.0  # a tradução entra no custo do job de legendas
     return await _image_job(user, jobs.RenderRequest(
         node_id=req.node_id, name=req.name, gen="subtitles", prompt="subtitles", keyframe_prompt="subtitles",
         duration=float(src["duration"]), ref_image_urls=[req.source_url],
         local_op={"segments": segs, "style": req.style, "position": req.position, "size": req.size,
-                  "color": req.color, "highlight": req.highlight}))
+                  "color": req.color, "highlight": req.highlight, "translate_usd": translate_usd}))
 
 
 @router.post("/direction/interpret")

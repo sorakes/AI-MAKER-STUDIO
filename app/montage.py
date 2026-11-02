@@ -57,13 +57,19 @@ def assemble_sequence(uid: int, items: list[dict], aspect: str = "16:9", audio: 
             f"format=yuv420p,settb=AVTB[v{i}]")
 
     cur, total = "v0", durs[0]
-    for i, j in enumerate(joins, start=1):
-        spec = TRANSITIONS.get(j.get("kind", "cut"), TRANSITIONS["cut"])
-        d = float(j.get("duration") or spec["default"])
-        d = max(MIN_T, min(d, durs[i - 1] - 0.1, durs[i] - 0.1))
-        offset = max(0.0, total - d)
-        chains.append(f"[{cur}][v{i}]xfade=transition={spec['xfade']}:duration={d:.3f}:offset={offset:.3f}[x{i}]")
-        cur, total = f"x{i}", total + durs[i] - d
+    if joins and all(j.get("kind", "cut") == "cut" for j in joins):
+        # só cortes secos: concatena sem sobreposição, para o total bater com a soma dos trechos (o xfade tirava
+        # um pedaço de cada corte e o áudio ficava fora de sincronia)
+        chains.append("".join(f"[v{i}]" for i in range(len(clips))) + f"concat=n={len(clips)}:v=1:a=0[vout]")
+        cur, total = "vout", sum(durs)
+    else:
+        for i, j in enumerate(joins, start=1):
+            spec = TRANSITIONS.get(j.get("kind", "cut"), TRANSITIONS["cut"])
+            d = float(j.get("duration") or spec["default"])
+            d = max(MIN_T, min(d, durs[i - 1] - 0.1, durs[i] - 0.1))
+            offset = max(0.0, total - d)
+            chains.append(f"[{cur}][v{i}]xfade=transition={spec['xfade']}:duration={d:.3f}:offset={offset:.3f}[x{i}]")
+            cur, total = f"x{i}", total + durs[i] - d
 
     if audio:
         args += ["-i", str(audio)]

@@ -487,7 +487,8 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     else:
                         ref = storage.resolve(spec.ref_image_urls[1], user) if spec.gen == "style" else None
                         await asyncio.to_thread(relight.apply_local, spec.local_op, src, dest, ref)
-                    st["output"], cost, url = storage.to_url(dest), 0.0, None  # já gravado: nada a baixar
+                    # já gravado: nada a baixar; legendas traduzidas cobram a tradução (custo real do provedor)
+                    st["output"], cost, url = storage.to_url(dest), float((spec.local_op or {}).get("translate_usd") or 0.0), None
                 elif m["provider"] == "openrouter":
                     url, cost = await asyncio.to_thread(_openrouter_image, m, prompt, spec, step_refs)
                 else:
