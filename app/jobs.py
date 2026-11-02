@@ -507,8 +507,19 @@ async def _run(job: dict, user: dict, resume: bool = False):
                         rep = await asyncio.to_thread(outpaint.inpaint_report, storage.resolve(spec.composite["original_url"], user),
                                                       raw, storage.resolve(spec.local_op["mask_url"], user), spec.prompt, m.get("label"))
                         rep["raw_url"] = storage.to_url(raw)
+                        rep["ident"] = spec.local_op.get("ident")  # o que a visão identificou (ou None = fallback)
+                        rep["input_mode"] = spec.local_op.get("input_mode", "marked")
                         job["result"] = {"inpaint": rep}
-                    if spec.composite:  # a área protegida volta a ser o original, byte a byte na composição
+                    if spec.composite and spec.gen == "inpaint" and spec.local_op.get("mask_url"):
+                        # borda esfumada e cor ajustada ao entorno; fora da máscara dilatada, o original byte a byte
+                        job["detail"] = "recompondo a área protegida"
+                        c = spec.composite
+                        composed = await asyncio.to_thread(outpaint.finish_inpaint, storage.resolve(st["output"]),
+                                                           storage.resolve(c["original_url"], user),
+                                                           storage.resolve(spec.local_op["mask_url"], user),
+                                                           tuple(c["size"]), storage.resolve(st["output"]))
+                        st["output"] = storage.to_url(composed)
+                    elif spec.composite:  # a área protegida volta a ser o original, byte a byte na composição
                         job["detail"] = "recompondo a área protegida"
                         c = spec.composite
                         composed = await asyncio.to_thread(outpaint.finish_ai, storage.resolve(st["output"]),
@@ -519,6 +530,8 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], status="error",
                           detail={"job": job["id"], "error": str(e)[:400]})
                 raise
+            if spec.gen == "inpaint":  # custo da identificação (visão) entra no custo do job; o log de visão já foi gravado
+                cost = float(cost or 0.0) + float((spec.local_op or {}).get("ident_usd") or 0.0)
             st["cost"] = cost
             st["status"] = "done"
             await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], cost=cost,

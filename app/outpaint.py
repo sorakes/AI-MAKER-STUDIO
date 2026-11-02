@@ -10,6 +10,7 @@ suave da região; a UI avisa que é simples.
 from pathlib import Path
 from typing import Literal
 
+import json
 import re
 
 from PIL import Image, ImageFilter, ImageOps
@@ -42,6 +43,9 @@ class InpaintRequest(BaseModel):
     prompt: str = Field("", max_length=1000)
     model: str | int | None = "auto"
     reinforce: bool = False  # nova tentativa: a IA não mexeu na região na primeira vez
+    # clean: original limpa como entrada (padrão); clean_mask: original + máscara como 2ª referência;
+    # marked: original com a região em magenta (como antes). Só vale com a identificação; sem ela, usa marked.
+    input_mode: Literal["clean", "clean_mask", "marked"] = "clean"
 
 
 def pick(user: dict, choice) -> dict | None:
@@ -94,19 +98,106 @@ def is_removal(text: str) -> bool:
     return not t or bool(REMOVE_RE.search(t))
 
 
-def inpaint_prompt(req: InpaintRequest, reinforce: bool = False) -> str:
-    """Instrução explícita: a região magenta é a ÚNICA área a alterar; o resto fica idêntico."""
+def _phrase(value, limit: int = 80) -> str:
+    """Texto curto vindo da identificação: uma linha, sem aspas, cortado."""
+    s = " ".join(str(value or "").split()).strip(" \"'")
+    return s[:limit]
+
+
+def inpaint_prompt(req: InpaintRequest, reinforce: bool = False, ident: dict | None = None) -> str:
+    """Instrução do inpaint.
+
+    Com a identificação (o que está dentro do contorno), o pedido é semântico, em linguagem comum, sem
+    magenta nem 'circulado': 'Remove <objeto> from this photo...'. Sem ela (visão falhou), usa a imagem marcada
+    e deixa a região magenta como única área a mudar."""
     text = req.prompt.strip()
+    removal = is_removal(text)
+    target = _phrase((ident or {}).get("target"))
+    if target:
+        surr = _phrase((ident or {}).get("surroundings")) or "the surrounding background"
+        if req.input_mode == "marked":
+            if removal:
+                body = (f"Image 1 has a solid MAGENTA region over {target}. Remove {target} completely and fill the "
+                        f"magenta region with {surr}, plausible and seamless.")
+            else:
+                body = f"Image 1 has a solid MAGENTA region over {target}. Replace the content of the magenta region with: {text}."
+            body += " Everything outside the magenta region must stay pixel-identical to image 1."
+        else:
+            if removal:
+                body = (f"Remove {target} from this photo. Fill the empty area with {surr}, matching lighting, "
+                        "perspective and style. Keep everything else in the photo exactly the same.")
+            else:
+                body = (f"Replace {target} with: {text}. Keep everything else in the photo exactly the same, "
+                        "matching lighting and perspective.")
+            if req.input_mode == "clean_mask":
+                body = "Image 2 is a black-and-white mask: the white area is the only area to change. " + body
+        if reinforce:
+            body += (f" The previous attempt left {target} visible: it must be completely gone."
+                     if removal else " The previous attempt barely changed the area: it must visibly change.")
+        return f"{body} Do not add text, borders or marks."
     base = ("Image 1 has a solid MAGENTA region marking the ONLY area to change. "
             "Everything outside the magenta region must stay pixel-identical to image 1. ")
-    if is_removal(text):
-        what = (f"Remove the object or part inside the magenta region ({text or 'the marked object'}) completely, "
-                "and fill that area with the surrounding background, plausible and seamless")
+    if removal:
+        what = ("Remove the object or part inside the magenta region completely, and fill that area with the "
+                "surrounding background, plausible and seamless")
     else:
         what = f"Replace the content inside the magenta region with: {text}"
     extra = (" The previous attempt barely changed the marked area: this time the magenta region MUST visibly change."
              if reinforce else "")
     return f"{base}{what}. Blend lighting, perspective and style with the surroundings.{extra} The result must contain NO magenta and no marks."
+
+
+IDENT_PROMPT = ('The photo has an area outlined in magenta. Identify what is inside the magenta outline. Answer with JSON '
+                'only, values in English: {"target": short noun phrase for what is inside (e.g. "the bee\'s wings"), '
+                '"type": "object" | "person" | "text" | "background", "surroundings": short phrase for what should fill '
+                'that space once it is removed (e.g. "the bee\'s body and a blurred green background")}.')
+
+
+def _png_url(img: Image.Image) -> str:
+    import base64
+    import io
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def outline_image(src: Image.Image, mask: Image.Image) -> Image.Image:
+    """Original com só o CONTORNO da região em magenta (a visão enxerga o que está dentro)."""
+    from PIL import ImageChops
+    base = src.convert("RGB")
+    m = mask.convert("L").resize(base.size).point(lambda v: 255 if v > 127 else 0)
+    r = max(2, max(base.size) // 250)
+    inner = m.filter(ImageFilter.GaussianBlur(r)).point(lambda v: 255 if v >= 250 else 0)
+    edge = ImageChops.subtract(m, inner)
+    return Image.composite(Image.new("RGB", base.size, MARK), base, edge)
+
+
+def identify_region(src: Image.Image, mask: Image.Image) -> tuple[dict | None, float]:
+    """Visão barata: o que está dentro do contorno e o que deve preencher o lugar. Devolve (dados, custo US$).
+
+    Qualquer falha (sem modelo de visão, resposta fora do formato) devolve (None, custo): o pedido segue com o
+    prompt de fallback. A identificação nunca derruba o job."""
+    from . import llm
+    small = src.convert("RGB").copy()
+    small.thumbnail((1024, 1024))
+    mk = mask.convert("L").resize(small.size)
+    try:
+        raw, cost = llm.chat_priced([{"role": "user", "content": [
+            {"type": "text", "text": IDENT_PROMPT},
+            {"type": "image_url", "image_url": {"url": _png_url(outline_image(small, mk))}}]}],
+            kind="vision", as_json=True, timeout=60)
+    except Exception:  # noqa: BLE001 - visão opcional: qualquer erro cai no fallback
+        return None, 0.0
+    if not raw:
+        return None, float(cost or 0.0)
+    try:
+        data = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
+    except ValueError:
+        return None, float(cost or 0.0)
+    if not isinstance(data, dict) or not _phrase(data.get("target")):
+        return None, float(cost or 0.0)
+    return {"target": _phrase(data.get("target")), "type": _phrase(data.get("type"), 20) or "object",
+            "surroundings": _phrase(data.get("surroundings"))}, float(cost or 0.0)
 
 
 def inpaint_report(orig_path, raw_path, mask_path, prompt: str, model: str | None) -> dict:
@@ -153,6 +244,43 @@ def marked_image(src: Image.Image, mask: Image.Image) -> Image.Image:
 def keep_for_inpaint(mask: Image.Image) -> Image.Image:
     """Recomposição do inpaint: branco fora da região pintada (o original fica), preto dentro."""
     return ImageOps.invert(mask.convert("L"))
+
+
+def _match_color(ai: Image.Image, orig: Image.Image, band: Image.Image) -> Image.Image:
+    """Ajusta a cor da região gerada à média do entorno (faixa logo fora da máscara), limitado a ±30."""
+    from PIL import ImageStat
+    so = ImageStat.Stat(orig, mask=band).mean
+    sa = ImageStat.Stat(ai, mask=band).mean
+    shift = [max(-30, min(30, round(o - a))) for o, a in zip(so, sa)]
+    return Image.merge("RGB", [ch.point(lambda v, s=s: max(0, min(255, v + s))) for ch, s in zip(ai.split(), shift)])
+
+
+def finish_inpaint(ai_path: Path, original_path: Path, mask_path: Path, size: tuple[int, int], dest: Path) -> Path:
+    """Recomposição do inpaint com borda suave: a região da IA é a máscara dilatada e esfumada (sem serrilhado
+    nem retângulo), com a cor ajustada ao entorno. Fora da máscara dilatada o resultado é o original, pixel a pixel.
+
+    A saída da IA é levada ao tamanho do quadro antes de compor (a IA pode devolver outra dimensão)."""
+    from PIL import ImageChops
+    with Image.open(ai_path) as a:
+        ai = a.convert("RGB")
+        if ai.size != size:
+            ai = ai.resize(size, Image.Resampling.LANCZOS)
+    with Image.open(original_path) as o:
+        orig = o.convert("RGB")
+        if orig.size != size:
+            orig = orig.resize(size, Image.Resampling.LANCZOS)
+    with Image.open(mask_path) as mk:
+        m = mk.convert("L").resize(size).point(lambda v: 255 if v > 127 else 0)
+    sigma = min(12.0, max(6.0, max(size) / 420))  # esfumado: 6 a 12 px conforme a resolução
+    dil = m.filter(ImageFilter.GaussianBlur(2 * sigma)).point(lambda v: 255 if v >= 1 else 0)
+    if m.getbbox():
+        band = ImageChops.subtract(dil, m)  # faixa logo fora da máscara: onde a IA e o original se encontram
+        if band.getbbox():
+            ai = _match_color(ai, orig, band)
+    alpha = ImageChops.multiply(m.filter(ImageFilter.GaussianBlur(sigma)), dil)  # 0 fora da dilatação
+    out_path = dest.with_suffix(".png")
+    Image.composite(ai, orig, alpha).save(out_path, format="PNG")
+    return out_path
 
 
 def local_outpaint(src: Image.Image, W: int, H: int, x: int, y: int) -> Image.Image:
