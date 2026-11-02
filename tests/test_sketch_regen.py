@@ -21,7 +21,8 @@ def env(monkeypatch, make_user, login):
     u = make_user("sketch@test.local")
     c = login("sketch@test.local", c=TestClient(app))
     src = storage.user_dir(u["id"], "renders") / "origem.png"
-    src.write_bytes(PNG)
+    from PIL import Image
+    Image.new("RGB", (64, 48), (120, 60, 200)).save(src, format="PNG")
     started = []
     monkeypatch.setattr(jobs, "start", lambda job, user, resume=False: started.append(job))
     monkeypatch.setattr(registry, "pick", lambda user, kind, model_id=None, need=None: FAKE_MODEL if kind == "image" else None)

@@ -8,7 +8,7 @@ const cv = { nodes: [], edges: [], pan: { x: 60, y: 40 }, zoom: 0.9, sel: null, 
 
 // Cada área tem o próprio canvas e a própria paleta de nós.
 const WS_PALETTE = {
-  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'review', 'montage'],
+  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'extend', 'review', 'montage'],
   character: ['chargen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
   product: ['prodgen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
 };
@@ -437,6 +437,12 @@ const PALETTE = {
       + 'A saída é uma imagem: 1º frame de um novo vídeo, referência (R) ou entrada A/B de uma transição.',
     make: (pos) => newFrameNode(pos),
   },
+  extend: {
+    icon: 'video', title: 'Estender / loop', tag: 'vídeo → vídeo',
+    what: 'Estende um vídeo com uma continuação de 3, 5 ou 8 s (a partir do último frame) ou cria um loop perfeito sem IA (ida e volta, ou crossfade final → início).',
+    how: 'Ligue o vídeo na entrada → escolha Estender (com câmera e movimento desenhados, se quiser) ou Loop → gerar. Sem modelo com quadro inicial, só o loop fica disponível.',
+    make: (pos) => newExtend(pos),
+  },
   speak: {
     icon: 'user', title: 'Fala (personagem)', tag: 'imagem + áudio → vídeo',
     what: 'Faz o personagem da imagem falar um áudio enviado (ou um texto, quando houver voz). A duração do vídeo é a do áudio.',
@@ -538,7 +544,7 @@ function frameOf(n) {
   if (n.type === 'transition') return n.output?.last_frame || null;
   if (n.type === 'frame') return extractedFrame(n);
   if (['upscale', 'relight', 'edit'].includes(n.type)) return n.output?.url || null;
-  if (n.type === 'speak') return n.output?.last_frame || null;
+  if (n.type === 'speak' || n.type === 'extend') return n.output?.last_frame || null;
   if (n.type === 'review') return frameOf(incoming(n.id)[0]);
   if (n.type === 'media') return n.media.kind === 'video' ? n.media.last_frame : n.media.url;
   if (n.type === 'shot') return n.output?.last_frame || (n.output?.kind === 'image' ? n.output.url : null);
@@ -550,7 +556,7 @@ function frameOf(n) {
 function videoOf(n) {
   if (n?.type === 'review') return videoOf(incoming(n.id)[0]);
   if (n?.type === 'media' && n.media.kind === 'video') return n.media.url;
-  if (n?.type === 'shot' || n?.type === 'transition') return n.output?.kind === 'video' ? n.output.url : null;
+  if (n?.type === 'shot' || n?.type === 'transition' || n?.type === 'extend') return n.output?.kind === 'video' ? n.output.url : null;
   return null;
 }
 
@@ -800,6 +806,7 @@ const KIND = {
   relight: { label: 'Relight / Estilo', icon: 'sparkles' },
   edit: { label: 'Expandir / editar', icon: 'sparkles' },
   speak: { label: 'Fala', icon: 'user' },
+  extend: { label: 'Estender / loop', icon: 'video' },
 };
 
 function nodeEl(n) {
@@ -823,7 +830,7 @@ function nodeEl(n) {
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
       <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
-    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
+    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, extend: extendBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
       ? '<span class="cv-port in" data-port="a" title="Entrada A: vídeo ou imagem de onde a transição sai"><i>A</i></span><span class="cv-port in port-b" data-port="b" title="Entrada B: vídeo ou imagem onde a transição chega"><i>B</i></span>'
       : n.type === 'speak'
@@ -857,6 +864,7 @@ function nodeEl(n) {
   if (n.type === 'relight') bindRelight(el, n);
   if (n.type === 'edit') bindEdit(el, n);
   if (n.type === 'speak') bindSpeak(el, n);
+  if (n.type === 'extend') bindExtend(el, n);
   if (n.type === 'review') bindReview(el, n);
   if (n.type === 'brief') bindBrief(el, n);
   if (n.type === 'cast') bindCast(el, n);
@@ -1131,6 +1139,103 @@ async function runSpeak(n) {
   renderNode(n);
   save();
   toast(job.mode === 'local' ? `${n.name}: sem lip sync real, animação simples` : `${n.name}: gerando a fala`);
+  return watchJob(n);
+}
+
+// ---------------- Estender vídeo / loop perfeito ----------------
+
+function newExtend(pos) {
+  return { id: uid('ext'), type: 'extend', name: t('Estender / loop'), op: 'extend', seconds: 5, transition: 'none',
+    prompt: '', loopMode: 'pingpong', loopSeconds: 1, model: 'auto', status: 'idle', output: null, takes: [], jobId: null,
+    extendMode: null, noStartModel: false, ...pos };
+}
+
+function extendBody(n) {
+  const src = videoOf(incoming(n.id)[0]);
+  const ext = n.op !== 'loop';
+  const done = !!n.output;
+  const extendFields = `
+    ${field('Duração da continuação', `<select data-k="seconds">${[3, 5, 8].map((s) => opt(s, n.seconds, `${s} s`)).join('')}</select>`)}
+    ${field('Como unir', `<select data-k="transition">${opt('none', n.transition, 'Corte seco')}${opt('dissolve', n.transition, 'Dissolve curto')}</select>`)}
+    ${field('O que acontece (opcional)', `<textarea data-k="prompt" rows="2" maxlength="1000" placeholder="Ex.: a câmera se afasta devagar">${esc(n.prompt)}</textarea>`)}
+    ${directionCard(n)}
+    ${n.noStartModel ? `<div class="cv-warn">${ic('alert')} Nenhum modelo de vídeo com quadro inicial disponível: só o loop (sem IA) está disponível.</div>` : ''}`;
+  const loopFields = `
+    ${field('Tipo de loop', `<select data-k="loopMode">${opt('pingpong', n.loopMode, 'Ida e volta')}${opt('crossfade', n.loopMode, 'Crossfade final → início')}</select>`)}
+    ${n.loopMode === 'crossfade' ? field('Duração do crossfade', `<select data-k="loopSeconds">${[0.5, 1, 1.5].map((s) => opt(s, n.loopSeconds, `${s} s`)).join('')}</select>`) : ''}
+    <div class="cv-meta"><span>Sem IA: o loop é feito no servidor (ffmpeg).</span></div>`;
+  return `
+    ${previewBlock(n, { placeholder: { icon: 'video', text: src ? '' : 'Ligue um vídeo na entrada' } })}
+    ${src ? '' : `<div class="cv-meta"><span class="err">${ic('alert')} Ligue um vídeo na entrada</span></div>`}
+    ${field('Operação', `<select data-k="op">${opt('extend', n.op, 'Estender (continuação com IA)')}${opt('loop', n.op, 'Loop perfeito (sem IA)')}</select>`)}
+    ${ext ? extendFields : loopFields}
+    <div class="cv-meta"><span>${ext ? 'Continua a partir do último frame e une ao clipe original.' : 'Ida e volta ou crossfade, sem modelo.'}</span></div>
+    ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
+    <div class="cv-foot">
+      <button class="btn primary" data-act="extend" ${n.status === 'running' || !src || (ext && n.noStartModel) ? 'disabled' : ''}>${ic('video')} ${ext ? (done ? 'Estender de novo' : 'Estender') : (done ? 'Gerar loop de novo' : 'Gerar loop')}</button>
+    </div>`;
+}
+
+function bindExtend(el, n) {
+  el.querySelectorAll('[data-k]').forEach((inp) => {
+    const ev = inp.tagName === 'TEXTAREA' ? 'input' : 'change';
+    inp.addEventListener(ev, () => {
+      const k = inp.dataset.k;
+      n[k] = ['seconds', 'loopSeconds'].includes(k) ? +inp.value : inp.value;
+      save();
+      if (['op', 'loopMode'].includes(k)) renderNode(n);
+    });
+  });
+  bindDirectionCard(el, n);
+  el.querySelector('[data-act=extend]')?.addEventListener('click', () => (n.op === 'loop' ? runLoop(n) : runExtend(n)).catch((err) => toast(err.message)));
+}
+
+const directionLayersOf = (n) => (n.direction?.layers || []).filter((l) => l.shapes.length || l.prompt.trim())
+  .map((l) => ({ color: l.color, label: l.label, prompt: l.prompt, shapes: l.shapes }));
+
+// Continuação com IA: último frame do clipe -> modelo com quadro inicial -> une com o original.
+async function runExtend(n) {
+  const src = videoOf(incoming(n.id)[0]);
+  if (!src) return toast('Ligue um vídeo na entrada');
+  if (n.status === 'running') return;
+  let job;
+  try {
+    job = await api('/api/video/extend', { node_id: n.id, name: n.name, source_url: src, seconds: +n.seconds,
+      transition: n.transition, prompt: n.prompt || '', direction_layers: directionLayersOf(n), model: n.model || 'auto' });
+  } catch (err) {
+    if (/Use o Loop/.test(err.message)) { n.noStartModel = true; renderNode(n); }
+    Object.assign(n, { status: 'error', error: err.message });
+    renderNode(n);
+    throw err;
+  }
+  n.noStartModel = false;
+  return startExtendJob(n, job, `${n.name}: gerando a continuação`);
+}
+
+// Loop sem IA (ffmpeg): ida e volta ou crossfade.
+async function runLoop(n) {
+  const src = videoOf(incoming(n.id)[0]);
+  if (!src) return toast('Ligue um vídeo na entrada');
+  if (n.status === 'running') return;
+  let job;
+  try {
+    job = await api('/api/video/loop', { node_id: n.id, name: n.name, source_url: src, mode: n.loopMode,
+      seconds: +n.loopSeconds, model: 'auto' });
+  } catch (err) {
+    Object.assign(n, { status: 'error', error: err.message });
+    renderNode(n);
+    throw err;
+  }
+  return startExtendJob(n, job, `${n.name}: gerando o loop`);
+}
+
+function startExtendJob(n, job, msg) {
+  n.extendMode = job.mode;
+  Object.assign(n, { jobId: job.id, status: 'running', progress: 0, error: null, cost: null,
+    stage: job.mode === 'local' ? 'ffmpeg' : 'enviado' });
+  renderNode(n);
+  save();
+  toast(msg);
   return watchJob(n);
 }
 

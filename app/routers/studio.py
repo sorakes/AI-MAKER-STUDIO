@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, camera, db, groups, lipsync, providers, sprites, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, camera, db, extend, groups, lipsync, providers, sprites, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -155,10 +155,8 @@ async def regenerate_from_sketch(req: sketch.SketchRequest, user: dict = Depends
         raise HTTPException(400, "Imagem com as marcações inválida ou grande demais")
     storage.resolve(req.source_url, user)  # a imagem de origem tem de ser do próprio usuário
     edit = await asyncio.to_thread(sketch.plan_edit, req)
-    job = await asyncio.to_thread(jobs.prepare, user, sketch.build_request(req, edit))  # cotas, permissões, fila
-    jobs.start(job, user)
-    return {**_tok_job(job, await groups.atoken_rate()),
-            "edit": {"prompt_en": edit["edit_en"], "notes_pt": edit["notes_pt"], "source": edit["source"]}}
+    out = await _image_job(user, sketch.build_request(req, edit), edit=True)  # cotas, permissões, fila
+    return {**out, "edit": {"prompt_en": edit["edit_en"], "notes_pt": edit["notes_pt"], "source": edit["source"]}}
 
 
 @router.post("/image/upscale")
@@ -173,10 +171,7 @@ async def upscale_image(req: upscale.UpscaleRequest, user: dict = Depends(curren
     rr = jobs.RenderRequest(node_id=req.node_id, name=req.name, gen="upscale", model=req.model, prompt=prompt,
                             keyframe_prompt=prompt, quality=req.quality, ref_image_urls=[req.source_url],
                             upscale_factor=req.factor)
-    job = await asyncio.to_thread(jobs.prepare, user, rr)
-    jobs.start(job, user)
-    mode = "local" if job["steps"][0]["provider"] == "local" else "ai"
-    return {**_tok_job(job, await groups.atoken_rate()), "mode": mode}
+    return await _image_job(user, rr, edit=True)
 
 
 async def _image_source(url: str, user: dict):
@@ -188,7 +183,13 @@ async def _image_source(url: str, user: dict):
         raise HTTPException(400, "Arquivo de entrada não é uma imagem") from e
 
 
-async def _image_job(user: dict, rr: jobs.RenderRequest) -> dict:
+async def _image_job(user: dict, rr: jobs.RenderRequest, edit: bool = False) -> dict:
+    """Render comum (cotas, fila, versões). Em edições (edit=True), a 1ª referência é o original: o pedido sai com o
+    mesmo aspecto dele e a saída da IA é levada ao tamanho exato (× fator, no upscale)."""
+    if edit:
+        w, h = await asyncio.to_thread(upscale.image_size, storage.resolve(rr.ref_image_urls[0], user))
+        rr.aspect = upscale.aspect_for(w, h)
+        rr.target_size = [w * (rr.upscale_factor or 1), h * (rr.upscale_factor or 1)]
     job = await asyncio.to_thread(jobs.prepare, user, rr)  # cotas, permissões, fila e versões do render comum
     jobs.start(job, user)
     mode = "local" if job["steps"][0]["provider"] == "local" else "ai"
@@ -203,7 +204,7 @@ async def relight_image(req: relight.RelightRequest, user: dict = Depends(curren
     return await _image_job(user, jobs.RenderRequest(
         node_id=req.node_id, name=req.name, gen="relight", model=req.model, prompt=prompt, keyframe_prompt=prompt,
         ref_image_urls=[req.source_url],
-        local_op={"kind": "relight", "preset": req.preset, "intensity": req.intensity, "light": req.light}))
+        local_op={"kind": "relight", "preset": req.preset, "intensity": req.intensity, "light": req.light}), edit=True)
 
 
 @router.post("/image/style-transfer")
@@ -215,7 +216,7 @@ async def style_transfer(req: relight.StyleRequest, user: dict = Depends(current
     return await _image_job(user, jobs.RenderRequest(
         node_id=req.node_id, name=req.name, gen="style", model=req.model, prompt=prompt, keyframe_prompt=prompt,
         ref_image_urls=[req.source_url, req.style_url],  # ordem importa: imagem 1 = original, imagem 2 = estilo
-        local_op={"kind": "style", "strength": req.strength}))
+        local_op={"kind": "style", "strength": req.strength}), edit=True)
 
 
 def _decode_mask(data_url: str) -> bytes:
@@ -256,7 +257,7 @@ async def outpaint_image(req: outpaint.OutpaintRequest, user: dict = Depends(cur
         node_id=req.node_id, name=req.name, gen="outpaint", model=req.model, prompt=prompt, keyframe_prompt=prompt,
         ref_image_urls=[canvas_url],  # a IA vê o quadro com a área nova marcada em cinza
         local_op={"kind": "outpaint", "W": W, "H": H, "x": x, "y": y, "original_url": req.source_url},
-        composite={"original_url": canvas_url, "keep_mask_url": keep_url, "size": [W, H]}))
+        composite={"original_url": canvas_url, "keep_mask_url": keep_url, "size": [W, H]}), edit=True)
 
 
 @router.post("/image/inpaint")
@@ -290,7 +291,7 @@ async def inpaint_image(req: outpaint.InpaintRequest, user: dict = Depends(curre
         node_id=req.node_id, name=req.name, gen="inpaint", model=req.model, prompt=prompt, keyframe_prompt=prompt,
         ref_image_urls=[storage.to_url(marked)],  # magenta na região: a IA troca só ela
         local_op={"kind": "inpaint", "original_url": req.source_url, "mask_url": storage.to_url(mask)},
-        composite={"original_url": req.source_url, "keep_mask_url": storage.to_url(keep), "size": list(size)}))
+        composite={"original_url": req.source_url, "keep_mask_url": storage.to_url(keep), "size": list(size)}), edit=True)
 
 
 @router.post("/video/lipsync")
@@ -317,6 +318,44 @@ async def lipsync_video(req: lipsync.LipSyncRequest, user: dict = Depends(curren
         node_id=req.node_id, name=req.name, gen="lipsync", model=req.model, prompt=prompt, keyframe_prompt=prompt,
         aspect=req.aspect, duration=seconds, ref_image_urls=[req.image_url],
         local_op={"kind": "lipsync", "audio_url": req.audio_url, "aspect": req.aspect, "seconds": seconds}))
+
+
+async def _video_source(url: str, user: dict) -> dict:
+    """Clipe do próprio usuário (403 se for de outro, 400 se não for vídeo). Devolve duração e caminho."""
+    path = storage.resolve(url, user)
+    try:
+        info = await asyncio.to_thread(media.probe, path)
+    except Exception as e:  # noqa: BLE001 - arquivo que o ffprobe não lê
+        raise HTTPException(400, "Arquivo de entrada não é um vídeo") from e
+    if not info.get("duration") or not info.get("width"):
+        raise HTTPException(400, "Arquivo de entrada não é um vídeo")
+    return {"path": path, **info}
+
+
+@router.post("/video/extend")
+async def extend_video(req: extend.ExtendRequest, user: dict = Depends(current_user)):
+    """Estender: último frame do clipe -> continuação com IA (modelo com quadro inicial) -> une com o original."""
+    src = await _video_source(req.source_url, user)
+    if not extend.pick(user, req.model):
+        raise HTTPException(400, extend.NO_START_MSG)
+    last = await asyncio.to_thread(media.extract_frame, src["path"], True)
+    prompt = extend.extend_prompt(req)
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="video", model=req.model, prompt=prompt, keyframe_prompt=prompt,
+        start_image_url=storage.to_url(last), duration=float(req.seconds), aspect=await asyncio.to_thread(extend.aspect_of, src["path"]),
+        extend_source_url=req.source_url, extend_transition=req.transition, ref_image_urls=[]))
+
+
+@router.post("/video/loop")
+async def loop_video(req: extend.LoopRequest, user: dict = Depends(current_user)):
+    """Loop perfeito sem IA: ida e volta, ou crossfade final->início (ffmpeg)."""
+    src = await _video_source(req.source_url, user)
+    if req.mode == "crossfade" and req.seconds >= src["duration"] / 2:
+        raise HTTPException(400, "O crossfade precisa ser menor que a metade do clipe")
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="loop", prompt="loop", keyframe_prompt="loop",
+        duration=float(src["duration"]), ref_image_urls=[req.source_url],
+        local_op={"kind": "loop", "mode": req.mode, "seconds": req.seconds}))
 
 
 @router.post("/direction/interpret")

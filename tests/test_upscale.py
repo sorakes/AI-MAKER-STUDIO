@@ -197,3 +197,24 @@ def test_non_image_source_is_rejected(login, make_user, no_ai):
     txt.write_bytes(b"isto nao e uma imagem")
     r = c.post("/api/image/upscale", json={"source_url": storage.to_url(txt), "factor": 2})
     assert r.status_code == 400
+
+
+def test_endpoint_ai_output_keeps_source_aspect_and_exact_size(me, ai_available, monkeypatch, login, make_user):
+    """Regressão: a IA devolve outro aspecto (1376x768); o resultado tem de ser exatamente original × fator."""
+    started = []
+    monkeypatch.setattr(jobs, "start", lambda job, user, resume=False: started.append(job))
+    buf = io.BytesIO()
+    Image.new("RGB", (1376, 768), (10, 200, 10)).save(buf, format="PNG")
+    data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    monkeypatch.setattr(jobs, "_openrouter_image", lambda m, prompt, spec, refs: (data_url, 0.02))
+    u = make_user(f"upscale-size-{_uniq()}@test.local")
+    c = login(u["email"], c=TestClient(app))
+    me2 = auth.public_user(u)
+    src = _png(storage.user_dir(me2["id"], "uploads") / "quadrada.png", size=(64, 64))
+    r = c.post("/api/image/upscale", json={"source_url": storage.to_url(src), "factor": 2, "creativity": 10, "similarity": 90})
+    assert r.status_code == 200, r.text
+    assert started[0]["spec"]["target_size"] == [128, 128]
+    asyncio.run(jobs._run(started[0], me2))
+    assert started[0]["status"] == "done", started[0].get("error")
+    with Image.open(storage.resolve(started[0]["output"], me2)) as out:
+        assert out.size == (128, 128)
