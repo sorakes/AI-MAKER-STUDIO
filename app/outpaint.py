@@ -127,15 +127,19 @@ def local_inpaint(src: Image.Image, mask: Image.Image) -> Image.Image:
     return Image.composite(fill, base, m)
 
 
-def finish_ai(ai_path: Path, original_path: Path, keep_path: Path, size: tuple[int, int], dest: Path) -> None:
-    """Leva a saída da IA ao tamanho do quadro e recompõe o original sobre o que a máscara protege."""
+def finish_ai(ai_path: Path, original_path: Path, keep_path: Path, size: tuple[int, int], dest: Path) -> Path:
+    """Leva a saída da IA ao tamanho do quadro e recompõe o original sobre o que a máscara protege.
+
+    Grava em PNG (sem perda): um JPEG recomprimido mudaria os pixels do original. Devolve o caminho gravado."""
     with Image.open(ai_path) as a:
         ai = a.convert("RGB").resize(size, Image.Resampling.LANCZOS)
     with Image.open(original_path) as o:
         orig = o.convert("RGB").resize(size, Image.Resampling.LANCZOS)
     with Image.open(keep_path) as k:
         keep = k.convert("L").resize(size)
-    Image.composite(orig, ai, keep).save(dest)
+    out = dest.with_suffix(".png")
+    Image.composite(orig, ai, keep).save(out, format="PNG")
+    return out
 
 
 def apply_local(op: dict, paths: dict[str, str], dest: Path) -> None:

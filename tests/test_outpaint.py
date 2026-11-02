@@ -287,3 +287,23 @@ def test_source_must_belong_to_the_user(login, make_user, no_ai):
     c = login(make_user(f"op-own-{_uniq()}@test.local")["email"], c=TestClient(app))
     other = auth.public_user(make_user(f"outro-op-{_uniq()}@test.local"))
     assert c.post("/api/image/outpaint", json={"source_url": _mine(other)}).status_code == 403
+
+
+def test_outpaint_keeps_the_original_exact_even_when_the_ai_returns_jpeg(me, ai_available, monkeypatch, login):
+    """Regressão: a IA devolve JPEG; a recomposição tem de gravar PNG, senão o original muda por compressão."""
+    started = []
+    monkeypatch.setattr(jobs, "start", lambda job, user, resume=False: started.append(job))
+    buf = io.BytesIO()
+    Image.new("RGB", (200, 100), GREEN).save(buf, format="JPEG", quality=60)
+    jpeg = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    monkeypatch.setattr(jobs, "_openrouter_image", lambda m, prompt, spec, refs: (jpeg, 0.02))
+    url = _mine(me, color=(30, 120, 200))
+    c = login(me["email"], c=TestClient(app))
+    assert c.post("/api/image/outpaint", json={"source_url": url, "aspect": "16:9", "anchor": "center"}).status_code == 200
+    job = started[0]
+    W, H, x, y = outpaint.layout(64, 48, "16:9", "center")
+    asyncio.run(jobs._run(job, me))
+    assert job["status"] == "done", job.get("error")
+    assert job["output"].endswith(".png")
+    with Image.open(storage.resolve(job["output"], me)) as out:
+        assert out.crop((x, y, x + 64, y + 48)).tobytes() == Image.new("RGB", (64, 48), (30, 120, 200)).tobytes()

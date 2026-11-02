@@ -467,9 +467,10 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     if spec.composite:  # a área protegida volta a ser o original, byte a byte na composição
                         job["detail"] = "recompondo a área protegida"
                         c = spec.composite
-                        await asyncio.to_thread(outpaint.finish_ai, storage.resolve(st["output"]),
-                                                storage.resolve(c["original_url"], user), storage.resolve(c["keep_mask_url"], user),
-                                                tuple(c["size"]), storage.resolve(st["output"]))
+                        composed = await asyncio.to_thread(outpaint.finish_ai, storage.resolve(st["output"]),
+                                                           storage.resolve(c["original_url"], user), storage.resolve(c["keep_mask_url"], user),
+                                                           tuple(c["size"]), storage.resolve(st["output"]))
+                        st["output"] = storage.to_url(composed)
                 if spec.extend_source_url:  # continuação pronta: une com o clipe original (corte ou dissolve)
                     job["detail"] = "juntando com o clipe original"
                     items = [{"type": "clip", "path": storage.resolve(spec.extend_source_url, user)}]
