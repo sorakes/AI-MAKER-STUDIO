@@ -67,7 +67,9 @@ def test_offline_model_or_bad_answer_is_an_error(monkeypatch):
 def test_estimate_is_images_plus_video_seconds():
     shots = [{"duration": 4.0}] * 4
     est = storyboard.estimate(shots)
-    assert est == {"images": 4, "video_seconds": 16.0, "usd": round(4 * 0.034 + 16 * 0.09, 2)}
+    assert est["images"] == 4 and est["video_seconds"] == 16.0
+    assert est["usd"] == round(4 * 0.034 + 16 * 0.09, 2)
+    assert est["image_usd"] == storyboard.IMAGE_USD and est["video_usd_per_s"] == storyboard.VIDEO_USD_PER_S
 
 
 def test_request_limits_are_enforced():

@@ -92,7 +92,7 @@ def _scale(shots: list[dict], total: int) -> None:
 def estimate(shots: list[dict]) -> dict:
     images = len(shots)
     seconds = round(sum(x["duration"] for x in shots), 1)
-    return {"images": images, "video_seconds": seconds,
+    return {"images": images, "video_seconds": seconds, "image_usd": IMAGE_USD, "video_usd_per_s": VIDEO_USD_PER_S,
             "usd": round(images * IMAGE_USD + seconds * VIDEO_USD_PER_S, 2)}
 
 

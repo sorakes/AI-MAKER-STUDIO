@@ -411,9 +411,11 @@ async def storyboard_plan(req: storyboard.PlanRequest, user: dict = Depends(need
     """Briefing -> plano com N planos (só texto; nada é gerado). Os nós são criados no front."""
     require(user, "node_brief")
     try:
-        return await asyncio.to_thread(storyboard.build_plan, req)
+        out = await asyncio.to_thread(storyboard.build_plan, req)
     except storyboard.StoryboardError as e:
         raise HTTPException(503, str(e)) from e
+    out["estimate"]["tokens_per_usd"] = await groups.atoken_rate()  # o usuário vê tokens, como no resto do app
+    return out
 
 
 @router.post("/autoprompt")
