@@ -53,11 +53,11 @@ function audioBody(n) {
   const disabled = busy || (n.tab === 'voice' && !n.text.trim());
   return `
     ${previewBlock(n, { placeholder: { icon: 'music', text: 'Escolha a aba, configure e gere' } })}
-    <div class="aud-tabs" role="tablist" aria-label="Tipo de áudio">${tabs}</div>
+    <div class="aud-tabs" role="tablist" aria-label="Tipo de áudio">${tabs}</div>${betaTag()}
     <div class="aud-panel" role="tabpanel" id="aud-panel-${n.id}" aria-labelledby="aud-tab-${n.tab}-${n.id}">${panel}</div>
     ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
     <div class="cv-foot">
-      <button class="btn primary" data-act="gen" ${disabled ? 'disabled' : ''}>${ic('music')} ${n.output ? `${go} de novo` : go}</button>
+      <button class="btn primary" data-act="gen" ${disabled ? 'disabled' : ''}>${ic('music')} ${n.output ? `${go} de novo` : go} ${betaTag()}</button>
     </div>`;
 }
 

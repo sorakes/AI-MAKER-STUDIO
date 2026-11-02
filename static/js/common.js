@@ -3,6 +3,8 @@
 const state = { me: null, catalog: null, models: { image: [], video: [] }, jobs: [], files: [] };
 
 const $ = (s) => document.querySelector(s);
+// Selo "BETA": um só componente, com texto real (não só cor) e explicação para leitor de tela e para o mouse.
+const betaTag = () => '<span class="beta-tag" role="note" aria-label="Recurso em beta" title="Recurso em beta: pode mudar ou falhar">BETA</span>';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const lensLabel = (k) => (k.endsWith('m') ? `${k.slice(0, -1)}mm macro` : `${k}mm`);
 const fmtBytes = (b) => (b >= 2 ** 30 ? `${(b / 2 ** 30).toFixed(2)} GB` : b >= 2 ** 20 ? `${(b / 2 ** 20).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);

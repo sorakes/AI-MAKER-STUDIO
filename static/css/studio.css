@@ -1069,6 +1069,9 @@ html.i18n-wait body { visibility: hidden; }
 .aud-panel { display: grid; gap: 8px; }
 .cv-preview audio { width: 100%; }
 
+/* Selo BETA (um componente para todo recurso em beta) */
+.beta-tag { display: inline-flex; align-items: center; margin-left: 6px; padding: 0 6px; border-radius: 999px; border: 1px solid currentColor; font: 600 .56rem var(--font-mono); letter-spacing: .06em; line-height: 1.5; color: #f5b041; background: rgba(245,176,65,.12); vertical-align: middle; white-space: nowrap; }
+
 /* Editar vídeo: trecho e opções */
 .vedit-trim { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .vedit-check { display: flex; gap: 8px; align-items: center; font-size: .72rem; }

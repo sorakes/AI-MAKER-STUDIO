@@ -264,7 +264,7 @@ function capsTags(m) {
     if (c.i2v) t.push('imagem→vídeo');
     if (c.end_frame) t.push('frame final (transição)');
     if (c.durations?.length) t.push(c.durations.length > 3 ? `${Math.min(...c.durations)}–${Math.max(...c.durations)}s` : `${c.durations.join('/')}s`);
-    if (c.audio) t.push('áudio');
+    if (c.audio) t.push('áudio (beta)');
   }
   if (m.kind === 'image') {
     if (c.t2i) t.push('texto→imagem');

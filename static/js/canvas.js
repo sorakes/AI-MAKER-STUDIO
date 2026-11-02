@@ -451,7 +451,7 @@ const PALETTE = {
     make: (pos) => newFrameNode(pos),
   },
   speak: {
-    icon: 'user', title: 'Fala (personagem)', tag: 'imagem + áudio → vídeo',
+    icon: 'user', title: 'Fala (personagem)', tag: 'imagem + áudio → vídeo', beta: true,
     what: 'Faz o personagem da imagem falar um áudio enviado (ou um texto, quando houver voz). A duração do vídeo é a do áudio.',
     how: 'Ligue a imagem do personagem na entrada I → envie o áudio (ou escreva o texto) → escolha o formato → Gerar fala. Sem lip sync real neste provedor, o resultado é uma animação simples com o áudio.',
     make: (pos) => newSpeak(pos),
@@ -463,7 +463,7 @@ const PALETTE = {
     make: (pos) => newSubs(pos),
   },
   audio: {
-    icon: 'music', title: 'Áudio', tag: 'voz · música · efeito',
+    icon: 'music', title: 'Áudio', tag: 'voz · música · efeito', beta: true,
     what: 'Gera uma voz a partir de texto, uma música por prompt ou um efeito sonoro. A saída tem prévia e pode ir para a trilha da Montagem ou para a Fala.',
     how: 'Escolha a aba (Voz, Música ou Efeito), configure e gere. Ligue o áudio na Montagem para usar como trilha.',
     make: (pos) => newAudio(pos),
@@ -475,7 +475,7 @@ const PALETTE = {
     make: (pos) => newVideoEdit(pos),
   },
   performance: {
-    icon: 'user', title: 'Performance', tag: 'imagem → personagem falando',
+    icon: 'user', title: 'Performance', tag: 'imagem → personagem falando', beta: true,
     what: 'O personagem da imagem fala um texto com expressão e movimento. O modelo gera a fala e a boca com voz própria.',
     how: 'Ligue a imagem do personagem na entrada I → escreva a fala → escolha o formato → Ver custo → Gerar performance.',
     make: (pos) => newPerformance(pos),
@@ -521,7 +521,7 @@ const nodeAllowed = (key) => !key || state.me?.permissions?.[`node_${key}`] !== 
 function renderPalette() {
   $('#cvPalette').innerHTML = Object.entries(PALETTE).filter(([k]) => WS_PALETTE[cv.ws].includes(k) && nodeAllowed(k)).map(([k, p]) => `
     <div class="cv-pal" draggable="true" data-node="${k}">
-      <div class="cv-pal-head"><span class="cv-pal-icon">${ic(p.icon)}</span><b>${esc(p.title)}</b><small>${esc(p.tag)}</small></div>
+      <div class="cv-pal-head"><span class="cv-pal-icon">${ic(p.icon)}</span><b>${esc(p.title)}</b>${p.beta ? betaTag() : ''}<small>${esc(p.tag)}</small></div>
       <p>${esc(p.what)}</p>
       <details><summary>Como usar</summary><p>${esc(p.how)}</p></details>
     </div>`).join('') + `
@@ -825,6 +825,9 @@ function removeNodeNow(id) {
   save();
 }
 
+// Nós em beta: o selo aparece na paleta e no cabeçalho.
+const BETA_TYPES = ['speak', 'audio', 'performance'];
+
 const KIND = {
   image: { label: 'Imagem', icon: 'image' }, video: { label: 'Vídeo', icon: 'video' }, audio: { label: 'Áudio', icon: 'music' },
   shot: { label: 'Gerar vídeo', icon: 'video' }, imagegen: { label: 'Gerar imagem', icon: 'image' }, montage: { label: 'Montagem', icon: 'film' },
@@ -858,7 +861,7 @@ function nodeEl(n) {
   el.innerHTML = `
     <div class="cv-head">
       <span class="cv-kicon">${ic(k.icon)}</span>
-      <div class="cv-htext"><small>${k.label}</small><span class="title" spellcheck="false" title="Duplo clique para renomear">${esc(n.name)}</span></div>
+      <div class="cv-htext"><small>${k.label}</small>${BETA_TYPES.includes(n.type) ? betaTag() : ''}<span class="title" spellcheck="false" title="Duplo clique para renomear">${esc(n.name)}</span></div>
       <span class="cv-dot ${n.status || 'idle'}" title="${esc(n.status || 'pronto para gerar')}"></span>
       ${canRegen ? `<button class="cv-hbtn" data-act="regen" title="Regerar (nova variação)" aria-label="Regerar (nova variação)">${ic('refresh')}</button>` : ''}
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
@@ -1123,12 +1126,12 @@ function speakBody(n) {
     ${audioLine}
     ${field('Texto da fala', `<textarea data-k="script" rows="2" maxlength="1000" placeholder="Ex.: Bem-vindo à nova coleção.">${esc(n.script)}</textarea>`)}
     <div class="cv-meta"><span>O texto vira áudio com a voz escolhida antes de animar.</span></div>
-    ${field('Voz', `<select data-k="voice">${AUDIO_VOICES.map(([v, l]) => opt(v, n.voice || 'alloy', l)).join('')}</select>`)}
+    ${field(`Voz ${betaTag()}`, `<select data-k="voice">${AUDIO_VOICES.map(([v, l]) => opt(v, n.voice || 'alloy', l)).join('')}</select>`)}
     ${field('Formato', `<select data-k="aspect">${aspects}</select>`)}
     <div class="cv-warn">${ic('alert')} ${esc(speakModeNote(n))}</div>
     ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
     <div class="cv-foot">
-      <button class="btn primary" data-act="speak" ${n.status === 'running' || !src || (!n.audio && !(n.script || '').trim()) ? 'disabled' : ''}>${ic('user')} ${done ? 'Gerar de novo' : 'Gerar fala'}</button>
+      <button class="btn primary" data-act="speak" ${n.status === 'running' || !src || (!n.audio && !(n.script || '').trim()) ? 'disabled' : ''}>${ic('user')} ${done ? 'Gerar de novo' : 'Gerar fala'} ${betaTag()}</button>
     </div>`;
 }
 
