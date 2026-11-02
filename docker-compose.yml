@@ -11,6 +11,17 @@ services:
         required: false   # works without .env too (defaults + random admin password in the log)
     volumes:
       - studio-data:/data
+    depends_on:
+      - tunnel
+
+  # Túnel rápido da Cloudflare (sem conta, sem IP fixo): dá ao provedor um link https temporário para buscar o vídeo
+  # a editar. Só /pub/<token>/<arquivo> responde por ele (o resto dá 404) e cada link expira quando o resultado chega.
+  # Sem este serviço o app continua funcionando: a edição de vídeo cai no caminho por quadros.
+  tunnel:
+    image: cloudflare/cloudflared:2024.12.2
+    container_name: ai-studio-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 --url http://studio:3000
 
 volumes:
   studio-data:

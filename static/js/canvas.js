@@ -509,8 +509,8 @@ const PALETTE = {
   },
   videoedit: {
     icon: 'video', title: 'Editar vídeo', tag: 'vídeo → vídeo',
-    what: 'Edita um trecho de até 10 s de um vídeo (ex.: trocar o céu, dia → noite, estilo anime) e remonta com o resto do vídeo. É uma aproximação por quadros.',
-    how: 'Ligue o vídeo na entrada → escreva o que mudar ou escolha um preset → ajuste início e fim → Ver custo → Editar trecho.',
+    what: 'Edita o vídeo inteiro (ex.: trocar a roupa ou o personagem, o céu, dia → noite, estilo anime). O modelo recebe o vídeo de verdade (FLUX, Runway Aleph, Seedance…), não quadros soltos.',
+    how: 'Ligue o vídeo na entrada → escolha o modelo → escreva o que mudar ou escolha um preset → (opcional) desmarque "vídeo inteiro" para editar só um trecho → Ver custo → Editar.',
     make: (pos) => newVideoEdit(pos),
   },
   performance: {
@@ -919,6 +919,7 @@ function nodeEl(n) {
         ? `${n.gen !== 'image' ? '<span class="cv-port in" title="Entrada: imagem ou vídeo (vira o 1º frame)"></span>' : ''}<span class="cv-port in port-ref" data-port="ref" title="R: imagens de referência (logo, produto, estilo)"><i>R</i></span>`
         : n.type === 'brief' ? '<span class="cv-port in" title="Entrada: nós de Elenco/Produto"></span>'
           : GEN_KIND[n.type] ? '<span class="cv-port in port-ref" data-port="ref" title="R: referências extras (fotos, Elenco)"><i>R</i></span>'
+          : n.type === 'videoedit' ? '<span class="cv-port in" title="Entrada: o vídeo a editar"></span><span class="cv-port in port-ref" data-port="ref" title="R: foto do personagem, roupa ou produto que entra no vídeo"><i>R</i></span>'
           : !['media', 'cast'].includes(n.type) ? '<span class="cv-port in" title="Entrada"></span>' : ''}
     ${!['montage', 'brief', 'save'].includes(n.type) ? `<span class="cv-port out" title="${n.type === 'cast' ? 'Saída: ligue na porta R dos geradores ou no Roteiro' : 'Saída: arraste até outro nó'}"></span>` : ''}`;
 
@@ -1545,16 +1546,17 @@ async function runUpscale(n) {
 // ---------------- Prévia, versões e regerar ----------------
 
 // Área de mídia de qualquer gerador: resultado (com versões), andamento ou placeholder.
-function previewBlock(n, { placeholder, ghost } = {}) {
+function previewBlock(n, { placeholder, ghost, source } = {}) {
   const out = n.output;
   const takes = n.takes || [];
   const idx = out ? takes.findIndex((t) => t.url === out.url) : -1;
   const media = out ? (out.kind === 'image' ? `<img src="${out.url}" alt="">`
     : out.kind === 'audio' ? `<audio src="${out.url}" controls preload="metadata"></audio>`
     : `<video src="${out.url}" poster="${out.thumb || ''}" controls loop playsinline></video>`)
+    : source ? `<video src="${source}" controls muted loop playsinline preload="metadata"></video>`
     : ghost ? `<img src="${ghost}" alt="" class="ghost">` : `<div class="cv-ph">${ic(placeholder?.icon || 'image')}<span>${esc(placeholder?.text || '')}</span></div>`;
   const running = n.status === 'running';
-  return `<div class="cv-preview ${out ? 'has' : ''} ${running ? 'busy' : ''}">
+  return `<div class="cv-preview ${out || source ? 'has' : ''} ${running ? 'busy' : ''}">
     ${media}
     ${running ? `<div class="cv-busy"><div class="cv-busy-txt">${ic('loader', 'spin')}<span>${esc(n.stage || 'gerando')}</span><b>${n.progress || 0}%</b></div><div class="cv-bar"><i data-st="width:${n.progress || 0}%"></i></div></div>` : ''}
     ${out && !running ? `<div class="cv-pv-tools">
@@ -1876,7 +1878,7 @@ function connect(from, to, port) {
   if (GEN_KIND[to.type]) port = 'ref';
   if (to.type === 'relight') return connectRelight(from, to, port);
   if (from.type === 'cast') {
-    if (to.type === 'shot' || GEN_KIND[to.type]) port = 'ref';
+    if (to.type === 'shot' || to.type === 'videoedit' || GEN_KIND[to.type]) port = 'ref';
     else if (to.type === 'brief') {
       if (cv.edges.some((e) => e.from === from.id && e.to === to.id)) return;
       cv.edges.push({ id: uid('e'), from: from.id, to: to.id });
@@ -1886,9 +1888,10 @@ function connect(from, to, port) {
     } else return toast('Elenco/Produto liga na porta R de Gerar imagem/vídeo ou no Roteiro');
   }
   if (to.type === 'brief') return toast('O Roteiro só recebe nós de Elenco/Produto');
-  if ((to.type === 'shot' || GEN_KIND[to.type]) && port === 'ref') {
+  if ((to.type === 'shot' || to.type === 'videoedit' || GEN_KIND[to.type]) && port === 'ref') {
     if (cv.edges.some((e) => e.from === from.id && e.to === to.id && e.port === 'ref')) return;
     cv.edges.push({ id: uid('e'), from: from.id, to: to.id, port: 'ref' });
+    if (to.type === 'videoedit') { renderNode(to); save(); return toast(`Referência "${from.name}" ligada: entra no vídeo como imagem do personagem/roupa`); }
     if (GEN_KIND[to.type]) { queueAssetSync(to); renderNode(to); save(); return toast(`Referência "${from.name}" ligada: vai em todas as posições`); }
     to.autoKey = null;
     renderNode(to);

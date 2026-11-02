@@ -6,7 +6,7 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from .. import auth, branding, db, groups, microsoft, prompts, providers, registry, storage, usage
+from .. import auth, branding, db, groups, microsoft, prompts, providers, registry, storage, usage, requirements
 from ..auth import admin_user, default_limits, public_user
 from ..config import APP_NAME
 from ..security import hash_password
@@ -448,6 +448,12 @@ class EditModel(BaseModel):
 @router.get("/models")
 def get_models():
     return registry.list_models()
+
+
+@router.get("/requirements")
+def get_requirements():
+    """Modelos obrigatórios por recurso (nó) e se cada um está coberto agora."""
+    return requirements.report()
 
 
 @router.post("/models")

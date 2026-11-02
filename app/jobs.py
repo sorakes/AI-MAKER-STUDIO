@@ -11,6 +11,7 @@ O pedido ao provedor fica salvo (polling_url): se o app reiniciar no meio, o job
 import asyncio
 import shutil
 import json
+import re
 import time
 import urllib.parse
 import uuid
@@ -54,6 +55,13 @@ class RenderRequest(BaseModel):
 
 # modelos virtuais do job (sem entrada no catálogo): transcrição e áudio
 VIRTUAL = {subtitles.STT_ID: subtitles.STT_LOCAL, **sound.VIRTUAL}
+# Editores de vídeo do catálogo (FLUX, Runway Aleph, Wan): não são cadastrados no painel, mas a etapa do job precisa
+# mostrar o modelo que de fato edita (antes aparecia o modelo de imagem do antigo modo por quadros).
+VEDIT_PREFIX = "vedit:"
+VIRTUAL.update({f"{VEDIT_PREFIX}{c['id']}": {
+    "id": f"{VEDIT_PREFIX}{c['id']}", "kind": "video", "label": c["label"], "provider": "openrouter",
+    "model_id": c["model_id"], "caps": {}, "fields": {}, "params": {}, "cost": c["usd_per_s"], "cost_unit": "second",
+    "key_id": None, "key_name": ""} for c in videoedit.CATALOG})
 
 def _step(kind: str, m: dict, label: str) -> dict:
     return {"kind": kind, "model": m["id"], "model_label": m["label"], "provider": m["provider"],
@@ -121,8 +129,14 @@ def plan(user: dict, r: RenderRequest) -> list[dict]:
                                 else f"O modelo de vídeo escolhido não faz {what}")
         return m
 
-    if r.gen == "videoedit":  # edição por quadros: um modelo de imagem por quadro (custo = quadros × imagem)
-        return [_step("video", image_model(r.image_model), "Edição por quadros")]
+    if r.gen == "videoedit":
+        if r.local_op.get("native"):  # o modelo de vídeo escolhido no node (catálogo ou cadastrado no painel)
+            cat = videoedit.catalog_entry(r.local_op.get("model_id") or "")
+            m = VIRTUAL[f"{VEDIT_PREFIX}{cat['id']}"] if cat else registry.get(r.local_op.get("reg_id"))
+            if not m:
+                raise HTTPException(400, "O modelo de edição de vídeo escolhido não está mais disponível")
+            return [_step("video", m, "Edição do vídeo")]
+        return [_step("video", image_model(r.image_model), "Edição por quadros")]  # legado: só jobs antigos
     if r.gen == "image":
         return [_step("image", image_model(r.model), "Imagem")]
     if r.gen == "bridge":
@@ -235,9 +249,12 @@ def prepare(user: dict, r: RenderRequest) -> dict:
                            else registry.get(s["model"])) for s in steps}
     for s in steps:
         s["est"] = registry.estimate(models[s["model"]], r.duration if s["kind"] == "video" else 1) * (videoedit.frame_count(r.duration) if r.gen == "videoedit" else 1)  # um modelo de imagem por quadro
+        if r.gen == "videoedit" and r.local_op.get("native"):  # edição nativa: preço por segundo do modelo de vídeo
+            s["est"] = videoedit.estimate_native(r.duration, r.local_op.get("usd_per_s"), r.local_op.get("chunk_s"),
+                                                r.local_op.get("min_usd") or 0.0)["usd"]
     est = sum(s["est"] for s in steps)
     usage.check(user, images=sum(s["kind"] == "image" for s in steps), videos=sum(s["kind"] == "video" for s in steps),
-                est_cost=est, model_ids=[k for k in models if k != upscale.LOCAL_ID], pending=_pending(user["id"]))
+                est_cost=est, model_ids=[k for k in models if k != upscale.LOCAL_ID and not str(k).startswith(VEDIT_PREFIX)], pending=_pending(user["id"]))
     job = {"id": f"job-{uuid.uuid4().hex[:10]}", "user_id": user["id"], "created": time.time(), "status": "queued",
            "progress": 0, "detail": None, "error": None, "spec": r.model_dump(), "steps": steps,
            "est_cost": round(est, 4), "output": None, "media": None, "keyframe": None}
@@ -451,12 +468,20 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 job["spec"]["prompt"], job["first_frame_caption"] = prompt, caption
             try:
                 if spec.gen == "videoedit":  # edição por quadros: cada quadro vai ao modelo de imagem; o resto volta original
-                    job["detail"] = "editando os quadros"
                     dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}.mp4"
                     op = {**spec.local_op, "user_id": job["user_id"]}
                     src = storage.resolve(spec.ref_image_urls[0], user)
-                    cost = await asyncio.to_thread(videoedit.run, src, op, dest,
-                                                   lambda prompt, frame_url: _openrouter_image(m, prompt, spec, [frame_url]))
+                    if spec.local_op.get("native"):  # vídeo inteiro no modelo de edição de vídeo, por link público temporário
+                        job["detail"] = "editando o vídeo"
+                        op["_refs"] = await asyncio.to_thread(  # fotos de referência (data URI) que vão junto com cada pedaço
+                            lambda: [media.data_url(storage.resolve(u, user)) for u in spec.local_op.get("ref_urls") or []])
+                        cost = await asyncio.to_thread(videoedit.run_native, src, op, dest,
+                                                       lambda prompt, clip_url, ref=None: _openrouter_video_edit(m, prompt, clip_url, op, ref, job))
+                    else:
+                        job["detail"] = "editando os quadros"
+                        cost = await asyncio.to_thread(videoedit.run, src, op, dest,
+                                                       lambda prompt, frame_url, prev=None: _openrouter_image(
+                                                       m, prompt, spec, [frame_url] + ([prev] if prev else []) + list(spec.local_op.get("ref_urls") or [])))
                     st["output"], url = storage.to_url(dest), None
                 elif spec.gen in sound.GEN_MODEL:  # voz, música ou efeito: arquivo de áudio (mp3) guardado no render
                     job["detail"] = f"gerando {sound.LABELS[spec.gen].lower()}"
@@ -553,7 +578,9 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     if post:  # resultado final em renders; o bruto (pasta oculta) é apagado aqui
                         st["output"] = await asyncio.to_thread(_publish, job, i, st["output"], hidden_raw)
             except Exception as e:
-                await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], status="error",
+                partial = float(getattr(e, "partial_cost", 0.0) or 0.0)  # pedaços já editados e cobrados antes da falha
+                st["cost"] = partial
+                await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], status="error", cost=partial,
                           detail={"job": job["id"], "error": str(e)[:400]})
                 raise
             if spec.gen == "inpaint":  # custo da identificação (visão) entra no custo do job; o log de visão já foi gravado
@@ -581,6 +608,81 @@ async def _run(job: dict, user: dict, resume: bool = False):
         await asyncio.to_thread(assets.on_job_done, job)
     except Exception as e:  # noqa: BLE001 - nunca derruba o job
         print(f"[assets] {e}")
+
+
+def _provider_msg(raw) -> str:
+    """Erro do provedor legível: tira o texto de dentro do JSON ("error": "...") em vez de mostrar o JSON cru."""
+    t = str(raw or "")
+    found = re.findall(r'"error"\s*:\s*"((?:[^"\\]|\\.)*)"', t)
+    return (found[-1] if found else t)[:300]
+
+
+def _edit_once(body: dict, key) -> tuple[bytes, float]:
+    """Uma tentativa: envia, acompanha o polling e baixa. ProviderError com a mensagem do provedor se falhar."""
+    handle = providers.or_video_submit(body, key)
+    deadline, errors = time.time() + VIDEO_TIMEOUT_S, 0
+    while True:
+        if time.time() > deadline:
+            raise providers.ProviderError(f"timeout: a edição não ficou pronta em {VIDEO_TIMEOUT_S // 60} min")
+        time.sleep(5)
+        try:
+            s = providers.or_video_status(handle)
+            errors = 0
+        except providers.ProviderError:
+            errors += 1
+            if errors > 10:
+                raise
+            continue
+        state = (s.get("status") or "").lower()
+        if state == "completed":
+            cost = float(((s.get("usage") or {}).get("cost")) or 0.0)
+            return providers.or_video_download(handle, s), cost
+        if state in ("failed", "cancelled", "expired"):
+            raise providers.ProviderError(f"o modelo recusou a edição: {_provider_msg(s.get('error'))}")
+
+
+def _openrouter_video_edit(m: dict, prompt: str, clip_url: str, op: dict, ref: str | None = None,
+                           job: dict | None = None) -> tuple[bytes, float]:
+    """Um pedaço de vídeo (link público temporário) -> modelo de edição de vídeo -> mp4 editado e custo real.
+    Bloqueante (roda em thread). Com `ref` (último quadro editado do pedaço anterior) tenta primeiro com a imagem de
+    continuidade; se o modelo recusar (no envio OU no processamento), refaz o pedaço sem ela."""
+    video = {"type": "video_url", "video_url": {"url": clip_url}}
+    photos = [{"type": "image_url", "image_url": {"url": u}} for u in op.get("_refs") or []]  # personagem/roupa/objeto
+    key = op.get("key_id") or m.get("key_id")
+
+    def body_for(text: str, extra: list) -> dict:
+        cat = videoedit.catalog_entry(op.get("model_id") or "")
+        if op.get("generic") and op.get("reg_id"):  # modelo de vídeo comum (Seedance...): duração, proporção e resolução
+            reg = registry.get(op["reg_id"])
+            body = registry.build_or_video_input(reg, prompt=text, start=None, end=None, refs=[],
+                                                 aspect=op.get("_aspect", "16:9"), duration=op.get("_chunk_len") or 5,
+                                                 quality="draft", seed=None)
+        elif cat and cat.get("generic"):  # modelo do catálogo sem cadastro (Wan 2.7): os campos vêm do catálogo
+            secs = op.get("_chunk_len") or 5
+            durs = cat["durations"]
+            aspect = op.get("_aspect", "16:9")
+            body = {"model": cat["model_id"], "prompt": text,
+                    "duration": next((d for d in sorted(durs) if d >= secs - 0.05), max(durs)),  # cobre o pedaço; o excesso é cortado
+                    "aspect_ratio": aspect if aspect in cat["aspects"] else cat["aspects"][0],
+                    "resolution": cat["resolution"]}
+        else:
+            body = {"model": op.get("model_id") or videoedit.NATIVE_MODEL, "prompt": text}
+        body["input_references"] = [video] + photos + extra
+        return body
+
+    if ref:
+        try:
+            return _edit_once(body_for(prompt + videoedit.CHAIN_NATIVE, [{"type": "image_url", "image_url": {"url": ref}}]), key)
+        except providers.ProviderError as e:
+            if job is not None:
+                job["detail"] = f"o modelo recusou a imagem de continuidade ({_provider_msg(e)[:80]}): refazendo o pedaço sem ela"
+    try:
+        return _edit_once(body_for(prompt, []), key)
+    except providers.ProviderError as e:
+        if photos:
+            raise providers.ProviderError(f"{e}. Se foi por causa das imagens de referência, escolha outro modelo "
+                                          "ou tire as referências.") from e
+        raise
 
 
 def _openrouter_image(m: dict, prompt: str, spec: RenderRequest, ref_urls: list[str] | None = None) -> tuple[str, float]:

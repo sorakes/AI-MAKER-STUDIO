@@ -44,6 +44,8 @@ Open `http://localhost:3000`, sign in with the admin account and paste your Open
 
 Data (SQLite database + user files) lives in the `studio-data` volume (`/data` inside the container).
 
+**Edit video** needs the `tunnel` service (a Cloudflare quick tunnel, no account, started by `docker compose`). Video-editing models (FLUX Video Edit, Runway Aleph, Wan, Seedance) only accept the source video as a public HTTPS link, so the app hands out one temporary link per clip: `/pub/<token>/<file>`, revoked as soon as the result arrives (or after 45 min). Through the tunnel **only** `/pub/` answers; the studio, login, API and `/files` return 404. Without the tunnel the node says so and does not edit. Set `TUNNEL_HOST` to use a named tunnel with a fixed domain instead. **Keys & Models → Required models per feature** shows what each node needs and whether it is covered.
+
 **Backup:** copy the volume. The database alone does not expose the keys: without the `SECRET_KEY` they cannot be decrypted. Keep the `SECRET_KEY` somewhere else.
 
 ## Run without Docker
