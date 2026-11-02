@@ -8,7 +8,7 @@ const cv = { nodes: [], edges: [], pan: { x: 60, y: 40 }, zoom: 0.9, sel: null, 
 
 // Cada área tem o próprio canvas e a própria paleta de nós.
 const WS_PALETTE = {
-  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'extend', 'subs', 'audio', 'review', 'montage'],
+  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'extend', 'subs', 'audio', 'videoedit', 'review', 'montage'],
   character: ['chargen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
   product: ['prodgen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
 };
@@ -461,6 +461,12 @@ const PALETTE = {
     how: 'Escolha a aba (Voz, Música ou Efeito), configure e gere. Ligue o áudio na Montagem para usar como trilha.',
     make: (pos) => newAudio(pos),
   },
+  videoedit: {
+    icon: 'video', title: 'Editar vídeo', tag: 'vídeo → vídeo',
+    what: 'Edita um trecho de até 10 s de um vídeo (ex.: trocar o céu, dia → noite, estilo anime) e remonta com o resto do vídeo. É uma aproximação por quadros.',
+    how: 'Ligue o vídeo na entrada → escreva o que mudar ou escolha um preset → ajuste início e fim → Ver custo → Editar trecho.',
+    make: (pos) => newVideoEdit(pos),
+  },
   edit: {
     icon: 'sparkles', title: 'Expandir / editar região', tag: 'quadro maior ou região trocada',
     what: 'Expande a imagem para outro aspecto (a IA preenche as bordas) ou troca uma região pintada, mantendo o resto igual.',
@@ -556,7 +562,7 @@ function frameOf(n) {
   if (n.type === 'transition') return n.output?.last_frame || null;
   if (n.type === 'frame') return extractedFrame(n);
   if (['upscale', 'relight', 'edit'].includes(n.type)) return n.output?.url || null;
-  if (n.type === 'speak' || n.type === 'extend' || n.type === 'subs') return n.output?.last_frame || null;
+  if (n.type === 'speak' || n.type === 'extend' || n.type === 'subs' || n.type === 'videoedit') return n.output?.last_frame || null;
   if (n.type === 'review') return frameOf(incoming(n.id)[0]);
   if (n.type === 'media') return n.media.kind === 'video' ? n.media.last_frame : n.media.url;
   if (n.type === 'shot') return n.output?.last_frame || (n.output?.kind === 'image' ? n.output.url : null);
@@ -568,7 +574,7 @@ function frameOf(n) {
 function videoOf(n) {
   if (n?.type === 'review') return videoOf(incoming(n.id)[0]);
   if (n?.type === 'media' && n.media.kind === 'video') return n.media.url;
-  if (n?.type === 'shot' || n?.type === 'transition' || n?.type === 'extend' || n?.type === 'subs') return n.output?.kind === 'video' ? n.output.url : null;
+  if (n?.type === 'shot' || n?.type === 'transition' || n?.type === 'extend' || n?.type === 'subs' || n?.type === 'videoedit') return n.output?.kind === 'video' ? n.output.url : null;
   return null;
 }
 
@@ -821,6 +827,7 @@ const KIND = {
   extend: { label: 'Estender / loop', icon: 'video' },
   subs: { label: 'Legendas', icon: 'film' },
   audio: { label: 'Áudio', icon: 'music' },
+  videoedit: { label: 'Editar vídeo', icon: 'video' },
 };
 
 function nodeEl(n) {
@@ -844,7 +851,7 @@ function nodeEl(n) {
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
       <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
-    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, subs: subsBody, audio: audioBody, extend: extendBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
+    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, subs: subsBody, audio: audioBody, videoedit: videoEditBody, extend: extendBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
       ? '<span class="cv-port in" data-port="a" title="Entrada A: vídeo ou imagem de onde a transição sai"><i>A</i></span><span class="cv-port in port-b" data-port="b" title="Entrada B: vídeo ou imagem onde a transição chega"><i>B</i></span>'
       : n.type === 'speak'
@@ -880,6 +887,7 @@ function nodeEl(n) {
   if (n.type === 'speak') bindSpeak(el, n);
   if (n.type === 'subs') bindSubs(el, n);
   if (n.type === 'audio') bindAudio(el, n);
+  if (n.type === 'videoedit') bindVideoEdit(el, n);
   if (n.type === 'extend') bindExtend(el, n);
   if (n.type === 'review') bindReview(el, n);
   if (n.type === 'brief') bindBrief(el, n);

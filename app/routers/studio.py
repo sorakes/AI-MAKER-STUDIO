@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, audio, camera, db, extend, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, audio, camera, db, videoedit, extend, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -404,6 +404,38 @@ async def direction_interpret(req: direction.DirectionRequest, user: dict = Depe
 async def director_plan(req: director.PlanRequest, user: dict = Depends(need("ai_assist"))):
     require(user, "node_brief")
     return await asyncio.to_thread(director.plan, req)
+
+
+@router.post("/video/edit/quote")
+async def video_edit_quote(req: videoedit.VideoEditRequest, user: dict = Depends(current_user)):
+    """Estimativa antes de editar: quadros e custo em US$ (o front pede confirmação acima de US$ 0,25)."""
+    src = await _video_source(req.source_url, user)
+    end = min(req.end, src["duration"])
+    try:
+        videoedit.validate_segment(req.start, end, src["duration"])
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    m = registry.pick(user, "image", "auto", {"t2i": True})
+    if not m:
+        raise HTTPException(400, "Nenhum modelo de imagem disponível para editar os quadros")
+    est = videoedit.estimate(end - req.start, m["cost"])
+    return {**est, "confirm": est["usd"] > 0.25, "seconds": round(end - req.start, 2), "tokens_per_usd": await groups.atoken_rate()}
+
+
+@router.post("/video/edit")
+async def video_edit(req: videoedit.VideoEditRequest, user: dict = Depends(current_user)):
+    """Edita um trecho de um vídeo (até 10 s) por quadros; o resto volta original. Cota, fila e versões."""
+    src = await _video_source(req.source_url, user)
+    end = min(req.end, src["duration"])
+    try:
+        videoedit.validate_segment(req.start, end, src["duration"])
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="videoedit", prompt=videoedit.instruction(req), keyframe_prompt=req.preset,
+        duration=videoedit.segment_seconds(req.start, end), ref_image_urls=[req.source_url],
+        local_op={"start": req.start, "end": end, "prompt": req.prompt, "preset": req.preset,
+                  "strength": req.strength, "preserve_audio": req.preserve_audio}))
 
 
 @router.post("/audio/speech")
