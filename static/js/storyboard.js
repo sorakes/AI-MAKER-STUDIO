@@ -62,7 +62,7 @@ function openStoryboard() {
   dlg.addEventListener('close', () => { dlg.remove(); if (SB.dlg === dlg) SB.dlg = null; });
   dlg.querySelector('[data-sb=plan]').addEventListener('click', () => planStoryboard(dlg));
   dlg.querySelector('[data-sb=create]').addEventListener('click', () => createStoryboard(dlg));
-  dlg.querySelectorAll('[name=sbMode]').forEach((r) => r.addEventListener('change', () => refreshEstimate(dlg)));
+  dlg.querySelectorAll('[name=sbMode]').forEach((r) => r.addEventListener('change', () => { refreshEstimate(dlg); refreshCreate(dlg); }));
   dlg.querySelector('[data-sb=confirm]').addEventListener('change', () => refreshCreate(dlg));
   dlg.showModal();
   dlg.querySelector('[data-sb=brief]').focus();

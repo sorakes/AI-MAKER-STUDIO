@@ -24,6 +24,7 @@ def test_plan_comes_from_the_endpoint_and_nothing_is_generated_before_confirmati
     assert "if (generate && !dlg.querySelector('[data-sb=confirm]').checked) return" in create
     assert "if (generate) runAll()" in create  # gerar tudo só depois da confirmação
     assert "[data-sb=create]').disabled = !ok || blocked" in src  # botão travado enquanto o custo não é confirmado
+    assert "r.addEventListener('change', () => { refreshEstimate(dlg); refreshCreate(dlg); })" in src  # trocar o modo também trava
 
 
 def test_nodes_are_linked_image_to_video_to_cut_with_cast_on_ref_port():
