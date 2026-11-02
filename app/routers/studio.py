@@ -282,7 +282,7 @@ async def inpaint_image(req: outpaint.InpaintRequest, user: dict = Depends(curre
         size, marked, keep, mask = await asyncio.to_thread(build)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    prompt = outpaint.inpaint_prompt(req)
+    prompt = outpaint.inpaint_prompt(req, reinforce=req.reinforce)
     return await _image_job(user, jobs.RenderRequest(
         node_id=req.node_id, name=req.name, gen="inpaint", model=req.model, prompt=prompt, keyframe_prompt=prompt,
         ref_image_urls=[storage.to_url(marked)],  # magenta na região: a IA troca só ela

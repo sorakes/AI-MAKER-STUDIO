@@ -513,7 +513,7 @@ const PALETTE = {
     icon: 'film', title: 'Montagem', tag: 'corte final',
     what: 'Junta vídeos e transições na ordem das ligações, com cortes e trilha/locução, num MP4 final.',
     how: 'Ligue a saída dos vídeos/transições aqui → Montar. Mostra a sequência que vai sair.',
-    make: (pos) => ({ id: uid('mont'), type: 'montage', name: t('Corte final'), ...pos }),
+    make: (pos) => ({ id: uid('mont'), type: 'montage', name: 'Corte final', ...pos }),
   },
 };
 
@@ -542,11 +542,11 @@ function renderPalette() {
 }
 
 function newImageGen(pos) {
-  return { ...newShot(pos), id: uid('img'), gen: 'image', name: t('Nova imagem') };
+  return { ...newShot(pos), id: uid('img'), gen: 'image', name: 'Nova imagem' };
 }
 
 function newShot(pos) {
-  return { id: uid('shot'), type: 'shot', name: t('Novo vídeo'), intent: '', model: 'auto', imageModel: 'auto', startMode: 'auto',
+  return { id: uid('shot'), type: 'shot', name: 'Novo vídeo', intent: '', model: 'auto', imageModel: 'auto', startMode: 'auto',
     duration: 5, aspect: '16:9', quality: 'draft', lens: '35', path: { easing: 'ease', points: [] }, auto: null, autoKey: null, status: 'idle', ...pos };
 }
 
@@ -925,7 +925,7 @@ function nodeEl(n) {
 // ---------------- Relight / Estilo ----------------
 
 function newRelight(pos) {
-  return { id: uid('rl'), type: 'relight', name: t('Relight'), op: 'relight', preset: 'studio', intensity: 60, strength: 60,
+  return { id: uid('rl'), type: 'relight', name: 'Relight', op: 'relight', preset: 'studio', intensity: 60, strength: 60,
     prompt: '', lightDir: null, model: 'auto', status: 'idle', output: null, takes: [], jobId: null, opMode: null, ...pos };
 }
 
@@ -1031,7 +1031,7 @@ const EDIT_ASPECTS = ['1:1', '16:9', '9:16', '4:5', '21:9'];
 const EDIT_ANCHORS = [['center', 'Centro'], ['top', 'Topo'], ['bottom', 'Base'], ['left', 'Esquerda'], ['right', 'Direita']];
 
 function newEdit(pos) {
-  return { id: uid('ed'), type: 'edit', name: t('Expandir / editar'), op: 'outpaint', aspect: '16:9', anchor: 'center',
+  return { id: uid('ed'), type: 'edit', name: 'Expandir / editar', op: 'outpaint', aspect: '16:9', anchor: 'center',
     prompt: '', mask: null, model: 'auto', status: 'idle', output: null, takes: [], jobId: null, editMode: null, ...pos };
 }
 
@@ -1059,6 +1059,7 @@ function editBody(n) {
     ${field('O que colocar (opcional)', `<textarea data-k="prompt" rows="2" maxlength="1000" placeholder="Ex.: céu noturno com estrelas">${esc(n.prompt)}</textarea>`)}
     <div class="cv-meta"><span>${esc(editModeNote(n))}</span></div>
     ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
+    ${inpaintReport(n)}
     <div class="cv-foot">
       <button class="btn primary" data-act="edit" ${n.status === 'running' || !src || (!outpaint && !n.mask) ? 'disabled' : ''}>${ic('sparkles')} ${done ? 'Aplicar de novo' : (outpaint ? 'Expandir' : 'Editar região')}</button>
     </div>`;
@@ -1075,10 +1076,21 @@ function bindEdit(el, n) {
   });
   el.querySelector('[data-act=mask]')?.addEventListener('click', () => openMask(n));
   el.querySelector('[data-act=edit]')?.addEventListener('click', () => runEdit(n).catch((err) => toast(err.message)));
+  el.querySelector('[data-act=edit-retry]')?.addEventListener('click', () => runEdit(n, { reinforce: true }).catch((err) => toast(err.message)));
+}
+
+// Diagnóstico do inpaint (vem do job): pixels da máscara, mudança dentro/fora, e aviso com "Tentar de novo".
+function inpaintReport(n) {
+  const r = n.result?.inpaint;
+  if (!r || n.status === 'running') return '';
+  const mudou = `Máscara: ${r.mask_pixels.toLocaleString('pt-BR')} px · mudança dentro ${r.inside_mean} · fora ${r.outside_mean}`;
+  return `<div class="cv-meta"><span>${esc(mudou)}</span></div>` + (r.unchanged
+    ? `<div class="cv-warn">${ic('alert')} <span>A IA não alterou a região marcada.</span></div>
+       <div class="cv-foot"><button class="btn ghost" data-act="edit-retry">${ic('refresh')} Tentar de novo</button></div>` : '');
 }
 
 // Expandir ou editar região: entra na fila de jobs. Sem modelo com referências, o preenchimento simples avisa.
-async function runEdit(n) {
+async function runEdit(n, { reinforce = false } = {}) {
   const src = upscaleSource(n);
   if (!src) return toast('Ligue uma imagem na entrada');
   if (n.status === 'running') return;
@@ -1086,7 +1098,7 @@ async function runEdit(n) {
   try {
     if (n.op === 'inpaint') {
       if (!n.mask) return toast('Pinte a região que será editada');
-      job = await api('/api/image/inpaint', { node_id: n.id, name: n.name, source_url: src, mask: n.mask, prompt: n.prompt || '', model: n.model || 'auto' });
+      job = await api('/api/image/inpaint', { node_id: n.id, name: n.name, source_url: src, mask: n.mask, prompt: n.prompt || '', model: n.model || 'auto', reinforce });
     } else {
       job = await api('/api/image/outpaint', { node_id: n.id, name: n.name, source_url: src, aspect: n.aspect, anchor: n.anchor,
         prompt: n.prompt || '', model: n.model || 'auto' });
@@ -1107,7 +1119,7 @@ async function runEdit(n) {
 // ---------------- Fala (personagem falando) ----------------
 
 function newSpeak(pos) {
-  return { id: uid('sp'), type: 'speak', name: t('Fala'), script: '', aspect: '16:9', audio: null, voice: null,
+  return { id: uid('sp'), type: 'speak', name: 'Fala', script: '', aspect: '16:9', audio: null, voice: null,
     model: 'auto', status: 'idle', output: null, takes: [], jobId: null, speakMode: null, ...pos };
 }
 
@@ -1224,7 +1236,7 @@ const SUBS_SIZES = [['small', 'Pequena'], ['medium', 'Média'], ['large', 'Grand
 const SUBS_LANGS = [['', 'Sem tradução'], ['en', 'Inglês'], ['pt', 'Português'], ['es', 'Espanhol']];
 
 function newSubs(pos) {
-  return { id: uid('sub'), type: 'subs', name: t('Legendas'), segments: [], style: 'classic', position: 'bottom',
+  return { id: uid('sub'), type: 'subs', name: 'Legendas', segments: [], style: 'classic', position: 'bottom',
     size: 'medium', color: '#ffffff', highlight: '#facc15', translate: '', status: 'idle', output: null, takes: [],
     jobId: null, result: null, ...pos };
 }
@@ -1378,7 +1390,7 @@ async function runSubs(n) {
 // ---------------- Upscale criativo ----------------
 
 function newUpscale(pos) {
-  return { id: uid('up'), type: 'upscale', name: t('Upscale'), factor: 2, creativity: 30, similarity: 70, prompt: '',
+  return { id: uid('up'), type: 'upscale', name: 'Upscale', factor: 2, creativity: 30, similarity: 70, prompt: '',
     model: 'auto', status: 'idle', output: null, takes: [], jobId: null, upscaleMode: null, ...pos };
 }
 

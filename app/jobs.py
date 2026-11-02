@@ -9,6 +9,7 @@ os modelos sabem fazer:
 O pedido ao provedor fica salvo (polling_url): se o app reiniciar no meio, o job retoma de onde parou.
 """
 import asyncio
+import shutil
 import json
 import time
 import urllib.parse
@@ -498,6 +499,15 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     elif spec.upscale_factor:
                         job["detail"] = "ajustando ao tamanho final"
                         await asyncio.to_thread(upscale.resize_file, storage.resolve(st["output"]), spec.upscale_factor)
+                    if spec.gen == "inpaint" and spec.composite and spec.local_op.get("mask_url"):
+                        # guarda o que a IA devolveu ANTES da recomposição (a composição sobrescreve o arquivo)
+                        job["detail"] = "medindo a região alterada"
+                        raw = storage.temp_file(job["user_id"], "_raw.png")
+                        shutil.copyfile(storage.resolve(st["output"]), raw)
+                        rep = await asyncio.to_thread(outpaint.inpaint_report, storage.resolve(spec.composite["original_url"], user),
+                                                      raw, storage.resolve(spec.local_op["mask_url"], user), spec.prompt, m.get("label"))
+                        rep["raw_url"] = storage.to_url(raw)
+                        job["result"] = {"inpaint": rep}
                     if spec.composite:  # a área protegida volta a ser o original, byte a byte na composição
                         job["detail"] = "recompondo a área protegida"
                         c = spec.composite

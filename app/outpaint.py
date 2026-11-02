@@ -10,7 +10,10 @@ suave da região; a UI avisa que é simples.
 from pathlib import Path
 from typing import Literal
 
+import re
+
 from PIL import Image, ImageFilter, ImageOps
+
 from pydantic import BaseModel, Field
 
 from . import registry
@@ -38,6 +41,7 @@ class InpaintRequest(BaseModel):
     mask: str  # data URL PNG da máscara pintada (branco = região a editar), do tamanho da imagem
     prompt: str = Field("", max_length=1000)
     model: str | int | None = "auto"
+    reinforce: bool = False  # nova tentativa: a IA não mexeu na região na primeira vez
 
 
 def pick(user: dict, choice) -> dict | None:
@@ -78,11 +82,52 @@ def outpaint_prompt(req: OutpaintRequest, W: int, H: int, x: int, y: int) -> str
             "result must contain NO grey, no borders, no frames and no marks.")
 
 
-def inpaint_prompt(req: InpaintRequest) -> str:
-    what = req.prompt.strip() or "a natural continuation of the surroundings"
-    return (f"Image 1 has a solid MAGENTA region marking where to edit. Replace ONLY that magenta region with: {what}. "
-            "Blend its lighting, perspective and style with the surroundings. Everything outside the magenta region must "
-            "stay identical to image 1. The result must contain NO magenta and no marks.")
+REMOVE_RE = re.compile(
+    r"\b(remov\w*|tir\w*|apag\w*|elimin\w*|delet\w*|quit\w*|retir\w*|suma\w*|sumir|sem\s+(o|a|os|as))\b"
+    r"|circul\w*|pintad\w*|marcad\w*|\boq\b|o\s+que\s+est\w*", re.I)
+UNCHANGED_MEAN = 4.0  # diferença média (0-255) dentro da máscara abaixo disso = a IA não mexeu na região
+
+
+def is_removal(text: str) -> bool:
+    """Pedido de remoção (ou sem texto, ou que aponta para a marcação): o modelo tem de apagar e preencher o fundo."""
+    t = (text or "").strip()
+    return not t or bool(REMOVE_RE.search(t))
+
+
+def inpaint_prompt(req: InpaintRequest, reinforce: bool = False) -> str:
+    """Instrução explícita: a região magenta é a ÚNICA área a alterar; o resto fica idêntico."""
+    text = req.prompt.strip()
+    base = ("Image 1 has a solid MAGENTA region marking the ONLY area to change. "
+            "Everything outside the magenta region must stay pixel-identical to image 1. ")
+    if is_removal(text):
+        what = (f"Remove the object or part inside the magenta region ({text or 'the marked object'}) completely, "
+                "and fill that area with the surrounding background, plausible and seamless")
+    else:
+        what = f"Replace the content inside the magenta region with: {text}"
+    extra = (" The previous attempt barely changed the marked area: this time the magenta region MUST visibly change."
+             if reinforce else "")
+    return f"{base}{what}. Blend lighting, perspective and style with the surroundings.{extra} The result must contain NO magenta and no marks."
+
+
+def inpaint_report(orig_path, raw_path, mask_path, prompt: str, model: str | None) -> dict:
+    """Diagnóstico guardado no job: pixels da máscara, mudança dentro/fora, prompt final e modelo."""
+    with Image.open(orig_path) as o, Image.open(raw_path) as r, Image.open(mask_path) as m:
+        stats = change_stats(o.convert("RGB"), r.convert("RGB"), m.convert("L"))
+    return {**stats, "prompt": prompt, "model": model}
+
+
+def change_stats(original: Image.Image, output: Image.Image, mask: Image.Image) -> dict:
+    """Quanto a IA mudou DENTRO da máscara e quanto mudou FORA (o fora deve ser zero por causa da recomposição)."""
+    from PIL import ImageChops, ImageStat
+    o = output.convert("RGB").resize(original.size)
+    diff = ImageChops.difference(original.convert("RGB"), o).convert("L")
+    m = mask.convert("L").resize(original.size).point(lambda v: 255 if v > 127 else 0)
+    inv = m.point(lambda v: 0 if v else 255)
+    inside = ImageStat.Stat(diff, mask=m).mean[0] if m.getbbox() else 0.0
+    outside = ImageStat.Stat(diff, mask=inv).mean[0]
+    px = sum(1 for v in m.getdata() if v)
+    return {"mask_pixels": px, "inside_mean": round(inside, 2), "outside_mean": round(outside, 2),
+            "unchanged": bool(px) and inside < UNCHANGED_MEAN}
 
 
 def canvas_image(src: Image.Image, W: int, H: int, x: int, y: int) -> Image.Image:
