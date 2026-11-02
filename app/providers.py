@@ -273,6 +273,49 @@ def openrouter_chat(model_id: str, messages: list[dict], *, as_json: bool = Fals
     return res["choices"][0]["message"], float((res.get("usage") or {}).get("cost") or 0)
 
 
+def openrouter_audio(model_id: str, messages: list[dict], *, audio: dict | None = None, key_id: int | None = None,
+                     timeout: float = 300) -> tuple[bytes, str, float]:
+    """Saída de áudio (voz ou música). O OpenRouter exige stream: junta os pedaços base64.
+    Devolve (bytes do áudio, transcrição/texto que veio junto, custo em US$)."""
+    key = get_key("openrouter", key_id)
+    if not key:
+        raise ProviderError("OpenRouter sem key configurada")
+    body = {"model": model_id, "messages": messages, "modalities": ["text", "audio"], "stream": True,
+            "usage": {"include": True}, **({"audio": audio} if audio else {})}
+    req = urllib.request.Request(f"{OPENROUTER}/chat/completions", data=json.dumps(body).encode(), method="POST",
+                                 headers={**_or_headers(key), "Content-Type": "application/json",
+                                          "User-Agent": f"{APP_NAME}/1.0"})
+    chunks, text, usage = [], [], {}
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            for raw in r:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if payload == "[DONE]":
+                    break
+                ev = json.loads(payload)
+                if ev.get("error"):
+                    raise ProviderError(str(ev["error"].get("message", ev["error"]))[:500])
+                usage = ev.get("usage") or usage
+                for ch in ev.get("choices") or []:
+                    d = ch.get("delta") or {}
+                    au = d.get("audio") or {}
+                    if au.get("data"):
+                        chunks.append(au["data"])
+                    if au.get("transcript"):
+                        text.append(au["transcript"])
+                    if d.get("content"):
+                        text.append(d["content"])
+    except urllib.error.HTTPError as e:
+        raise ProviderError(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:300]}") from e
+    except urllib.error.URLError as e:
+        raise ProviderError(f"sem conexão: {e.reason}") from e
+    data = base64.b64decode("".join(chunks)) if chunks else b""
+    return data, "".join(text), float(usage.get("cost") or 0)
+
+
 def openrouter_catalog() -> list[dict]:
     """Catálogo público (não gasta crédito): id, modalidades, preço."""
     data = _http("GET", f"{OPENROUTER}/models", timeout=30)["data"]

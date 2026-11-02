@@ -8,7 +8,7 @@ const cv = { nodes: [], edges: [], pan: { x: 60, y: 40 }, zoom: 0.9, sel: null, 
 
 // Cada área tem o próprio canvas e a própria paleta de nós.
 const WS_PALETTE = {
-  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'extend', 'subs', 'review', 'montage'],
+  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'extend', 'subs', 'audio', 'review', 'montage'],
   character: ['chargen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
   product: ['prodgen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
 };
@@ -455,6 +455,12 @@ const PALETTE = {
     how: 'Ligue o vídeo na entrada → Transcrever áudio (ou importe um .srt/.vtt) → edite as legendas → escolha o estilo → Gerar legendas.',
     make: (pos) => newSubs(pos),
   },
+  audio: {
+    icon: 'music', title: 'Áudio', tag: 'voz · música · efeito',
+    what: 'Gera uma voz a partir de texto, uma música por prompt ou um efeito sonoro. A saída tem prévia e pode ir para a trilha da Montagem ou para a Fala.',
+    how: 'Escolha a aba (Voz, Música ou Efeito), configure e gere. Ligue o áudio na Montagem para usar como trilha.',
+    make: (pos) => newAudio(pos),
+  },
   edit: {
     icon: 'sparkles', title: 'Expandir / editar região', tag: 'quadro maior ou região trocada',
     what: 'Expande a imagem para outro aspecto (a IA preenche as bordas) ou troca uma região pintada, mantendo o resto igual.',
@@ -814,6 +820,7 @@ const KIND = {
   speak: { label: 'Fala', icon: 'user' },
   extend: { label: 'Estender / loop', icon: 'video' },
   subs: { label: 'Legendas', icon: 'film' },
+  audio: { label: 'Áudio', icon: 'music' },
 };
 
 function nodeEl(n) {
@@ -837,7 +844,7 @@ function nodeEl(n) {
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
       <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
-    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, subs: subsBody, extend: extendBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
+    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, subs: subsBody, audio: audioBody, extend: extendBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
       ? '<span class="cv-port in" data-port="a" title="Entrada A: vídeo ou imagem de onde a transição sai"><i>A</i></span><span class="cv-port in port-b" data-port="b" title="Entrada B: vídeo ou imagem onde a transição chega"><i>B</i></span>'
       : n.type === 'speak'
@@ -872,6 +879,7 @@ function nodeEl(n) {
   if (n.type === 'edit') bindEdit(el, n);
   if (n.type === 'speak') bindSpeak(el, n);
   if (n.type === 'subs') bindSubs(el, n);
+  if (n.type === 'audio') bindAudio(el, n);
   if (n.type === 'extend') bindExtend(el, n);
   if (n.type === 'review') bindReview(el, n);
   if (n.type === 'brief') bindBrief(el, n);
@@ -1092,8 +1100,8 @@ function speakBody(n) {
     <label class="btn small ghost cv-upload">${ic('music')} Enviar áudio<input type="file" accept="audio/*" class="sr-only" data-role="speak-audio"></label>
     ${audioLine}
     ${field('Texto da fala', `<textarea data-k="script" rows="2" maxlength="1000" placeholder="Ex.: Bem-vindo à nova coleção.">${esc(n.script)}</textarea>`)}
-    <div class="cv-meta"><span>O texto precisa de uma voz (TTS), que ainda não está configurada.</span></div>
-    ${field('Voz', '<select data-k="voice" disabled><option>Sem provedor de voz</option></select>')}
+    <div class="cv-meta"><span>O texto vira áudio com a voz escolhida antes de animar.</span></div>
+    ${field('Voz', `<select data-k="voice">${AUDIO_VOICES.map(([v, l]) => opt(v, n.voice || 'alloy', l)).join('')}</select>`)}
     ${field('Formato', `<select data-k="aspect">${aspects}</select>`)}
     <div class="cv-warn">${ic('alert')} ${esc(speakModeNote(n))}</div>
     ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
@@ -1132,6 +1140,16 @@ async function runSpeak(n) {
   if (!src) return toast('Ligue a imagem do personagem na entrada I');
   if (!n.audio && !(n.script || '').trim()) return toast('Envie um áudio ou escreva o texto');
   if (n.status === 'running') return;
+  if (!n.audio) {  // texto sem áudio: gera a voz (TTS) antes de animar
+    Object.assign(n, { status: 'running', stage: 'gerando a voz', error: null });
+    renderNode(n);
+    try { const m = await speechForSpeak(n); n.audio = { url: m.url, name: 'voz (TTS)', duration: m.duration }; } catch (err) {
+      Object.assign(n, { status: 'error', error: err.message });
+      renderNode(n);
+      throw err;
+    }
+    save();
+  }
   let job;
   try {
     job = await api('/api/video/lipsync', { node_id: n.id, name: n.name, image_url: src, audio_url: n.audio?.url || null,
@@ -1488,6 +1506,7 @@ function previewBlock(n, { placeholder, ghost } = {}) {
   const takes = n.takes || [];
   const idx = out ? takes.findIndex((t) => t.url === out.url) : -1;
   const media = out ? (out.kind === 'image' ? `<img src="${out.url}" alt="">`
+    : out.kind === 'audio' ? `<audio src="${out.url}" controls preload="metadata"></audio>`
     : `<video src="${out.url}" poster="${out.thumb || ''}" controls loop playsinline></video>`)
     : ghost ? `<img src="${ghost}" alt="" class="ghost">` : `<div class="cv-ph">${ic(placeholder?.icon || 'image')}<span>${esc(placeholder?.text || '')}</span></div>`;
   const running = n.status === 'running';
@@ -1520,6 +1539,7 @@ function regenerate(n) {
   if (n.status === 'running') return;
   const go = n.type === 'transition' ? genBridge(n)
     : n.type === 'pose' ? runPose(n)
+      : n.type === 'audio' ? runAudio(n)
       : GEN_KIND[n.type] ? generateAllPoses(n, { regenerate: true })
         : n.type === 'sheet' ? buildSheet(n)
           : runShot(n);
@@ -2025,7 +2045,7 @@ async function runMontage(n) {
   if (!items.some((i) => i.type === 'clip')) return toast('Montagem sem vídeos prontos');
   try {
     const first = sequenceOf(n).find((s) => s.type !== 'transition');
-    const r = await api('/api/montage', { items, aspect: first?.aspect || '16:9', audio_url: n.audio?.url || null });
+    const r = await api('/api/montage', { items, aspect: first?.aspect || '16:9', audio_url: n.audio?.url || incomingAudioUrl(n) });
     n.output = r.url;
     renderNode(n);
     save();

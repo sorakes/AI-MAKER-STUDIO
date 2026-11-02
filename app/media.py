@@ -71,10 +71,20 @@ def describe(path: Path) -> dict:
         return {"kind": "video", "url": url, "thumb": storage.to_url(extract_frame(path, last=False)),
                 "last_frame": storage.to_url(extract_frame(path, last=True)), "name": path.name, **info}
     if kind == "audio":
-        return {"kind": "audio", "url": url, "name": path.name}
+        return {"kind": "audio", "url": url, "name": path.name, "duration": audio_duration(path)}
     if path.suffix.lower() == ".gif":  # GIF animado pesado: miniatura parada (1º quadro)
         return {"kind": "image", "url": url, "thumb": storage.to_url(gif_thumb(path)), "name": path.name}
     return {"kind": "image", "url": url, "thumb": url, "name": path.name}
+
+
+def audio_duration(path: Path) -> float:
+    """Duração de um arquivo de áudio (ffprobe). 0 se não der para ler."""
+    out = subprocess.run([_ff("ffprobe"), "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                         capture_output=True, text=True, timeout=30)
+    try:
+        return round(float(out.stdout.strip()), 2)
+    except ValueError:
+        return 0.0
 
 
 def gif_thumb(path: Path) -> Path:
