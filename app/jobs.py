@@ -17,7 +17,7 @@ import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from . import audio as sound, db, extend, videoedit, lipsync, media, montage, outpaint, promptgen, providers, registry, relight, storage, subtitles, upscale, usage
+from . import audio as sound, db, videoedit, lipsync, media, montage, outpaint, promptgen, providers, registry, relight, storage, subtitles, upscale, usage
 from .auth import CURRENT, public_user
 
 JOBS: dict[str, dict] = {}
@@ -49,8 +49,6 @@ class RenderRequest(BaseModel):
     target_size: list[int] = Field(default_factory=list)  # tamanho exato da saída (edições com IA); a IA não o garante
     local_op: dict = Field(default_factory=dict)  # gen=relight/style/outpaint/inpaint: operação do ajuste local (Pillow)
     composite: dict = Field(default_factory=dict)  # outpaint/inpaint: recompõe o original sobre o que a máscara protege
-    extend_source_url: str = ""  # gen=video com quadro inicial de extensão: une o clipe original com a continuação
-    extend_transition: str = "none"  # como unir: none (corte) | dissolve
 
 
 # modelos virtuais do job (sem entrada no catálogo): transcrição e áudio
@@ -72,8 +70,6 @@ def plan(user: dict, r: RenderRequest) -> list[dict]:
         return [_step("text", subtitles.STT_LOCAL, "Transcrição")]
     if r.gen == "subtitles":  # legendas queimadas com ffmpeg (local)
         return [_step("video", relight.local_model("Legendas"), "Legendas")]
-    if r.gen == "loop":  # loop sem IA: ida e volta ou crossfade, sempre local (ffmpeg)
-        return [_step("video", relight.local_model("Loop (sem IA)"), "Loop (sem IA)")]
     if r.gen == "lipsync":  # lip sync real se houver modelo habilitado; senão animação simples com o áudio
         m = lipsync.pick(user, r.model)
         label = "Fala com IA" if m else "Animação simples"
@@ -478,8 +474,6 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     elif spec.gen == "subtitles":  # queima as legendas e grava o .srt ao lado do vídeo
                         srt = await asyncio.to_thread(subtitles.burn, src, spec.local_op, dest)
                         job["result"] = {"srt_url": storage.to_url(srt)}
-                    elif spec.gen == "loop":
-                        await asyncio.to_thread(extend.apply_loop, spec.local_op, src, dest)
                     elif spec.gen == "lipsync":
                         audio = storage.resolve(spec.local_op["audio_url"], user)
                         await asyncio.to_thread(lipsync.apply_local, spec.local_op, src, audio, dest)
@@ -511,15 +505,6 @@ async def _run(job: dict, user: dict, resume: bool = False):
                                                            storage.resolve(c["original_url"], user), storage.resolve(c["keep_mask_url"], user),
                                                            tuple(c["size"]), storage.resolve(st["output"]))
                         st["output"] = storage.to_url(composed)
-                if spec.extend_source_url:  # continuação pronta: une com o clipe original (corte ou dissolve)
-                    job["detail"] = "juntando com o clipe original"
-                    items = [{"type": "clip", "path": storage.resolve(spec.extend_source_url, user)}]
-                    if spec.extend_transition == "dissolve":
-                        items.append({"type": "transition", "kind": "dissolve", "duration": 0.5})
-                    # o provedor cobra o mínimo do modelo (ex.: 4 s); a continuação entra só com a duração pedida
-                    items.append({"type": "clip", "path": storage.resolve(st["output"], user), "end": float(spec.duration)})
-                    joined = await asyncio.to_thread(montage.assemble_sequence, job["user_id"], items, spec.aspect, None)
-                    st["output"] = storage.to_url(joined)
             except Exception as e:
                 await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], status="error",
                           detail={"job": job["id"], "error": str(e)[:400]})

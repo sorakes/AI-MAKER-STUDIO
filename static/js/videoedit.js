@@ -35,7 +35,7 @@ function videoEditBody(n) {
       </div>
     </div>
     <label class="vedit-check"><input type="checkbox" data-k="preserveAudio" ${n.preserveAudio ? 'checked' : ''}> Manter o áudio original</label>
-    <div class="cv-meta"><span>${spanBad ? 'O trecho precisa ter de 0 a 10 s.' : `Trecho de ${span} s.`}</span></div>
+    <div class="cv-meta"><span data-role="vedit-span">${spanBad ? 'O trecho precisa ter de 0 a 10 s.' : `Trecho de ${span} s.`}</span></div>
     ${q ? `<div class="cv-meta"><span>Estimativa: ${q.frames} quadros, cerca de ${fmtTok(q.tokens)}.</span></div>` : ''}
     ${q?.confirm ? `<label class="vedit-check"><input type="checkbox" data-role="vedit-confirm"> Confirmo o custo estimado (acima de US$ ${VEDIT_CONFIRM_USD.toFixed(2)})</label>` : ''}
     ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
@@ -43,6 +43,17 @@ function videoEditBody(n) {
       <button class="btn ghost" data-act="vedit-quote" ${busy || !src || spanBad ? 'disabled' : ''}>${ic('sparkles')} Ver custo</button>
       <button class="btn primary" data-act="vedit-run" ${busy || !src || spanBad || !(n.prompt.trim() || n.preset !== 'none') ? 'disabled' : ''}>${ic('video')} ${n.output ? 'Editar de novo' : 'Editar trecho'}</button>
     </div>`;
+}
+
+// Aviso de trecho e botões sem recriar o node (o foco nos campos de início e fim é preservado).
+function syncVideoEditState(el, n) {
+  const span = Math.round((n.end - n.start) * 10) / 10;
+  const bad = !(n.end > n.start) || span > 10;
+  const src = videoOf(incoming(n.id)[0]);
+  const busy = n.status === 'running';
+  el.querySelector('[data-role=vedit-span]')?.replaceChildren(document.createTextNode(bad ? 'O trecho precisa ter de 0 a 10 s.' : `Trecho de ${span} s.`));
+  el.querySelector('[data-act=vedit-quote]')?.toggleAttribute('disabled', busy || !src || bad);
+  el.querySelector('[data-act=vedit-run]')?.toggleAttribute('disabled', busy || !src || bad || !(n.prompt.trim() || n.preset !== 'none'));
 }
 
 function bindVideoEdit(el, n) {
@@ -53,7 +64,8 @@ function bindVideoEdit(el, n) {
       if (inp.type === 'checkbox') n[k] = inp.checked;
       else n[k] = ['start', 'end'].includes(k) ? +inp.value : inp.value;
       save();
-      if (['preset', 'start', 'end'].includes(k)) renderNode(n);
+      if (k === 'preset') renderNode(n);  // campos numéricos: só o estado dos botões e o aviso de trecho acompanham
+      else syncVideoEditState(el, n);
     });
   });
   el.querySelector('[data-act=vedit-quote]')?.addEventListener('click', () => quoteVideoEdit(n).catch((err) => toast(err.message)));

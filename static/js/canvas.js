@@ -8,7 +8,7 @@ const cv = { nodes: [], edges: [], pan: { x: 60, y: 40 }, zoom: 0.9, sel: null, 
 
 // Cada área tem o próprio canvas e a própria paleta de nós.
 const WS_PALETTE = {
-  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'extend', 'subs', 'audio', 'videoedit', 'performance', 'review', 'montage'],
+  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'speak', 'subs', 'audio', 'videoedit', 'performance', 'review', 'montage'],
   character: ['chargen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
   product: ['prodgen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit', 'speak'],
 };
@@ -130,6 +130,10 @@ const wantsRefs = (n) => refsOf(n).length > 0 || castNodesOf(n).length > 0 || !!
 const diagramOf = (n) => { const f = startFrameOf(n); return f && n.direction?.diagram_url && n.direction.frame === f && n.sendDiagram !== false ? n.direction.diagram_url : null; };
 // escolha do modelo de vídeo sem depender do plano (evita laço planOf -> composeOn)
 const videoPick = (n) => chosenModel('video', n.model, startFrameOf(n) ? { i2v: true } : {}, wantsRefs(n));
+// Áudio junto com o vídeo: só para modelos que declaram suporte (caps.audio, do catálogo do OpenRouter).
+const videoSupportsAudio = (n) => !!videoPick(n)?.caps?.audio;
+const audioToggle = (n) => (n.gen === 'image' || !videoSupportsAudio(n) ? '' :
+  `<label class="vedit-check audio-toggle"><input type="checkbox" data-k="genAudio" ${n.genAudio ? 'checked' : ''}> <span>Gerar áudio</span>${betaTag()}</label>`);
 // Modelo que recebe referências leva o frame + referências direto: não precisa gerar o 1º frame com elas.
 const composeOn = (n) => n.gen !== 'image' && !!startFrameOf(n) && hasComposable(n) && n.compose !== 'off' && !videoPick(n)?.caps?.refs;
 // Imagens que vão para o vídeo: frame (vira imagem 1), desenho da câmera, referências
@@ -206,12 +210,25 @@ async function initCanvas() {
   setInterval(renderLibrary, 6000);
 }
 
+// Tipos de nó que saíram do produto: canvas antigos os trazem, então são ignorados e removidos ao carregar.
+const REMOVED_NODE_TYPES = ['extend'];
+
+function pruneRemovedNodes(d) {
+  const gone = new Set(d.nodes.filter((x) => REMOVED_NODE_TYPES.includes(x.type)).map((x) => x.id));
+  if (!gone.size) return 0;
+  d.nodes = d.nodes.filter((x) => !gone.has(x.id));
+  d.edges = d.edges.filter((e) => !gone.has(e.from) && !gone.has(e.to));
+  return gone.size;
+}
+
 // Carrega (uma vez) o canvas de uma área e retoma os renders que estavam rodando nela.
 async function loadWorkspaceDoc(ws) {
   if (cv.docs[ws]) return cv.docs[ws];
   const doc = await api(`/api/canvas?ws=${ws}`);
   const d = { nodes: doc.nodes || [], edges: doc.edges || [], pan: doc.pan || { x: 60, y: 40 }, zoom: doc.zoom || 0.9, kit: doc.kit,
     title: doc.title || '', created: doc.created || 0, migratedGen: doc.migratedGen };
+  const pruned = pruneRemovedNodes(d);
+  if (pruned && !cv.prunedNotice) { cv.prunedNotice = true; toast('Nó "Estender / loop" foi desativado e removido deste canvas'); }
   cv.docs[ws] = d;
   for (const n of d.nodes.filter((x) => x.jobId && x.status !== 'done')) {
     const j = await api(`/api/jobs/${n.jobId}`).catch(() => null);
@@ -437,14 +454,8 @@ const PALETTE = {
       + 'A saída é uma imagem: 1º frame de um novo vídeo, referência (R) ou entrada A/B de uma transição.',
     make: (pos) => newFrameNode(pos),
   },
-  extend: {
-    icon: 'video', title: 'Estender / loop', tag: 'vídeo → vídeo',
-    what: 'Estende um vídeo com uma continuação de 3, 5 ou 8 s (a partir do último frame) ou cria um loop perfeito sem IA (ida e volta, ou crossfade final → início).',
-    how: 'Ligue o vídeo na entrada → escolha Estender (com câmera e movimento desenhados, se quiser) ou Loop → gerar. Sem modelo com quadro inicial, só o loop fica disponível.',
-    make: (pos) => newExtend(pos),
-  },
   speak: {
-    icon: 'user', title: 'Fala (personagem)', tag: 'imagem + áudio → vídeo',
+    icon: 'user', title: 'Fala (personagem)', tag: 'imagem + áudio → vídeo', beta: true,
     what: 'Faz o personagem da imagem falar um áudio enviado (ou um texto, quando houver voz). A duração do vídeo é a do áudio.',
     how: 'Ligue a imagem do personagem na entrada I → envie o áudio (ou escreva o texto) → escolha o formato → Gerar fala. Sem lip sync real neste provedor, o resultado é uma animação simples com o áudio.',
     make: (pos) => newSpeak(pos),
@@ -456,7 +467,7 @@ const PALETTE = {
     make: (pos) => newSubs(pos),
   },
   audio: {
-    icon: 'music', title: 'Áudio', tag: 'voz · música · efeito',
+    icon: 'music', title: 'Áudio', tag: 'voz · música · efeito', beta: true,
     what: 'Gera uma voz a partir de texto, uma música por prompt ou um efeito sonoro. A saída tem prévia e pode ir para a trilha da Montagem ou para a Fala.',
     how: 'Escolha a aba (Voz, Música ou Efeito), configure e gere. Ligue o áudio na Montagem para usar como trilha.',
     make: (pos) => newAudio(pos),
@@ -468,7 +479,7 @@ const PALETTE = {
     make: (pos) => newVideoEdit(pos),
   },
   performance: {
-    icon: 'user', title: 'Performance', tag: 'imagem → personagem falando',
+    icon: 'user', title: 'Performance', tag: 'imagem → personagem falando', beta: true,
     what: 'O personagem da imagem fala um texto com expressão e movimento. O modelo gera a fala e a boca com voz própria.',
     how: 'Ligue a imagem do personagem na entrada I → escreva a fala → escolha o formato → Ver custo → Gerar performance.',
     make: (pos) => newPerformance(pos),
@@ -514,7 +525,7 @@ const nodeAllowed = (key) => !key || state.me?.permissions?.[`node_${key}`] !== 
 function renderPalette() {
   $('#cvPalette').innerHTML = Object.entries(PALETTE).filter(([k]) => WS_PALETTE[cv.ws].includes(k) && nodeAllowed(k)).map(([k, p]) => `
     <div class="cv-pal" draggable="true" data-node="${k}">
-      <div class="cv-pal-head"><span class="cv-pal-icon">${ic(p.icon)}</span><b>${esc(p.title)}</b><small>${esc(p.tag)}</small></div>
+      <div class="cv-pal-head"><span class="cv-pal-icon">${ic(p.icon)}</span><b>${esc(p.title)}</b>${p.beta ? betaTag() : ''}<small>${esc(p.tag)}</small></div>
       <p>${esc(p.what)}</p>
       <details><summary>Como usar</summary><p>${esc(p.how)}</p></details>
     </div>`).join('') + `
@@ -568,7 +579,7 @@ function frameOf(n) {
   if (n.type === 'transition') return n.output?.last_frame || null;
   if (n.type === 'frame') return extractedFrame(n);
   if (['upscale', 'relight', 'edit'].includes(n.type)) return n.output?.url || null;
-  if (n.type === 'speak' || n.type === 'extend' || n.type === 'subs' || n.type === 'videoedit' || n.type === 'performance') return n.output?.last_frame || null;
+  if (n.type === 'speak' || n.type === 'subs' || n.type === 'videoedit' || n.type === 'performance') return n.output?.last_frame || null;
   if (n.type === 'review') return frameOf(incoming(n.id)[0]);
   if (n.type === 'media') return n.media.kind === 'video' ? n.media.last_frame : n.media.url;
   if (n.type === 'shot') return n.output?.last_frame || (n.output?.kind === 'image' ? n.output.url : null);
@@ -580,7 +591,7 @@ function frameOf(n) {
 function videoOf(n) {
   if (n?.type === 'review') return videoOf(incoming(n.id)[0]);
   if (n?.type === 'media' && n.media.kind === 'video') return n.media.url;
-  if (n?.type === 'shot' || n?.type === 'transition' || n?.type === 'extend' || n?.type === 'subs' || n?.type === 'videoedit' || n?.type === 'performance') return n.output?.kind === 'video' ? n.output.url : null;
+  if (n?.type === 'shot' || n?.type === 'transition' || n?.type === 'subs' || n?.type === 'videoedit' || n?.type === 'performance') return n.output?.kind === 'video' ? n.output.url : null;
   return null;
 }
 
@@ -818,6 +829,9 @@ function removeNodeNow(id) {
   save();
 }
 
+// Nós em beta: o selo aparece na paleta e no cabeçalho.
+const BETA_TYPES = ['speak', 'audio', 'performance'];
+
 const KIND = {
   image: { label: 'Imagem', icon: 'image' }, video: { label: 'Vídeo', icon: 'video' }, audio: { label: 'Áudio', icon: 'music' },
   shot: { label: 'Gerar vídeo', icon: 'video' }, imagegen: { label: 'Gerar imagem', icon: 'image' }, montage: { label: 'Montagem', icon: 'film' },
@@ -830,7 +844,6 @@ const KIND = {
   relight: { label: 'Relight / Estilo', icon: 'sparkles' },
   edit: { label: 'Expandir / editar', icon: 'sparkles' },
   speak: { label: 'Fala', icon: 'user' },
-  extend: { label: 'Estender / loop', icon: 'video' },
   subs: { label: 'Legendas', icon: 'film' },
   audio: { label: 'Áudio', icon: 'music' },
   videoedit: { label: 'Editar vídeo', icon: 'video' },
@@ -852,13 +865,13 @@ function nodeEl(n) {
   el.innerHTML = `
     <div class="cv-head">
       <span class="cv-kicon">${ic(k.icon)}</span>
-      <div class="cv-htext"><small>${k.label}</small><span class="title" spellcheck="false" title="Duplo clique para renomear">${esc(n.name)}</span></div>
+      <div class="cv-htext"><small>${k.label}</small>${BETA_TYPES.includes(n.type) ? betaTag() : ''}<span class="title" spellcheck="false" title="Duplo clique para renomear">${esc(n.name)}</span></div>
       <span class="cv-dot ${n.status || 'idle'}" title="${esc(n.status || 'pronto para gerar')}"></span>
       ${canRegen ? `<button class="cv-hbtn" data-act="regen" title="Regerar (nova variação)" aria-label="Regerar (nova variação)">${ic('refresh')}</button>` : ''}
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
       <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
-    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, subs: subsBody, audio: audioBody, videoedit: videoEditBody, performance: performanceBody, extend: extendBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
+    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, speak: speakBody, subs: subsBody, audio: audioBody, videoedit: videoEditBody, performance: performanceBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
       ? '<span class="cv-port in" data-port="a" title="Entrada A: vídeo ou imagem de onde a transição sai"><i>A</i></span><span class="cv-port in port-b" data-port="b" title="Entrada B: vídeo ou imagem onde a transição chega"><i>B</i></span>'
       : n.type === 'speak'
@@ -896,7 +909,6 @@ function nodeEl(n) {
   if (n.type === 'audio') bindAudio(el, n);
   if (n.type === 'videoedit') bindVideoEdit(el, n);
   if (n.type === 'performance') bindPerformance(el, n);
-  if (n.type === 'extend') bindExtend(el, n);
   if (n.type === 'review') bindReview(el, n);
   if (n.type === 'brief') bindBrief(el, n);
   if (n.type === 'cast') bindCast(el, n);
@@ -1118,13 +1130,19 @@ function speakBody(n) {
     ${audioLine}
     ${field('Texto da fala', `<textarea data-k="script" rows="2" maxlength="1000" placeholder="Ex.: Bem-vindo à nova coleção.">${esc(n.script)}</textarea>`)}
     <div class="cv-meta"><span>O texto vira áudio com a voz escolhida antes de animar.</span></div>
-    ${field('Voz', `<select data-k="voice">${AUDIO_VOICES.map(([v, l]) => opt(v, n.voice || 'alloy', l)).join('')}</select>`)}
+    ${field(`Voz ${betaTag()}`, `<select data-k="voice">${AUDIO_VOICES.map(([v, l]) => opt(v, n.voice || 'alloy', l)).join('')}</select>`)}
     ${field('Formato', `<select data-k="aspect">${aspects}</select>`)}
     <div class="cv-warn">${ic('alert')} ${esc(speakModeNote(n))}</div>
     ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
     <div class="cv-foot">
-      <button class="btn primary" data-act="speak" ${n.status === 'running' || !src || (!n.audio && !(n.script || '').trim()) ? 'disabled' : ''}>${ic('user')} ${done ? 'Gerar de novo' : 'Gerar fala'}</button>
+      <button class="btn primary" data-act="speak" ${n.status === 'running' || !src || (!n.audio && !(n.script || '').trim()) ? 'disabled' : ''}>${ic('user')} ${done ? 'Gerar de novo' : 'Gerar fala'} ${betaTag()}</button>
     </div>`;
+}
+
+// Atualiza só o botão de gerar, sem recriar os campos (o foco e o cursor são preservados).
+function syncSpeakButton(el, n) {
+  const btn = el.querySelector('[data-act=speak]');
+  if (btn) btn.disabled = n.status === 'running' || !upscaleSource(n) || (!n.audio && !(n.script || '').trim());
 }
 
 function bindSpeak(el, n) {
@@ -1134,7 +1152,9 @@ function bindSpeak(el, n) {
     inp.addEventListener(ev, () => {
       n[inp.dataset.k] = inp.value;
       save();
-      if (inp.tagName === 'SELECT' || inp.tagName === 'TEXTAREA') renderNode(n);
+      // texto não reconstrói o node (o campo perderia o foco a cada letra): só o botão acompanha
+      if (inp.tagName === 'SELECT') renderNode(n);
+      else syncSpeakButton(el, n);
     });
   });
   el.querySelector('[data-role=speak-audio]')?.addEventListener('change', async (e) => {
@@ -1355,103 +1375,6 @@ async function runSubs(n) {
   return watchJob(n);
 }
 
-// ---------------- Estender vídeo / loop perfeito ----------------
-
-function newExtend(pos) {
-  return { id: uid('ext'), type: 'extend', name: t('Estender / loop'), op: 'extend', seconds: 5, transition: 'none',
-    prompt: '', loopMode: 'pingpong', loopSeconds: 1, model: 'auto', status: 'idle', output: null, takes: [], jobId: null,
-    extendMode: null, noStartModel: false, ...pos };
-}
-
-function extendBody(n) {
-  const src = videoOf(incoming(n.id)[0]);
-  const ext = n.op !== 'loop';
-  const done = !!n.output;
-  const extendFields = `
-    ${field('Duração da continuação', `<select data-k="seconds">${[3, 5, 8].map((s) => opt(s, n.seconds, `${s} s`)).join('')}</select>`)}
-    ${field('Como unir', `<select data-k="transition">${opt('none', n.transition, 'Corte seco')}${opt('dissolve', n.transition, 'Dissolve curto')}</select>`)}
-    ${field('O que acontece (opcional)', `<textarea data-k="prompt" rows="2" maxlength="1000" placeholder="Ex.: a câmera se afasta devagar">${esc(n.prompt)}</textarea>`)}
-    ${directionCard(n)}
-    ${n.noStartModel ? `<div class="cv-warn">${ic('alert')} Nenhum modelo de vídeo com quadro inicial disponível: só o loop (sem IA) está disponível.</div>` : ''}`;
-  const loopFields = `
-    ${field('Tipo de loop', `<select data-k="loopMode">${opt('pingpong', n.loopMode, 'Ida e volta')}${opt('crossfade', n.loopMode, 'Crossfade final → início')}</select>`)}
-    ${n.loopMode === 'crossfade' ? field('Duração do crossfade', `<select data-k="loopSeconds">${[0.5, 1, 1.5].map((s) => opt(s, n.loopSeconds, `${s} s`)).join('')}</select>`) : ''}
-    <div class="cv-meta"><span>Sem IA: o loop é feito no servidor (ffmpeg).</span></div>`;
-  return `
-    ${previewBlock(n, { placeholder: { icon: 'video', text: src ? '' : 'Ligue um vídeo na entrada' } })}
-    ${src ? '' : `<div class="cv-meta"><span class="err">${ic('alert')} Ligue um vídeo na entrada</span></div>`}
-    ${field('Operação', `<select data-k="op">${opt('extend', n.op, 'Estender (continuação com IA)')}${opt('loop', n.op, 'Loop perfeito (sem IA)')}</select>`)}
-    ${ext ? extendFields : loopFields}
-    <div class="cv-meta"><span>${ext ? 'Continua a partir do último frame e une ao clipe original.' : 'Ida e volta ou crossfade, sem modelo.'}</span></div>
-    ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
-    <div class="cv-foot">
-      <button class="btn primary" data-act="extend" ${n.status === 'running' || !src || (ext && n.noStartModel) ? 'disabled' : ''}>${ic('video')} ${ext ? (done ? 'Estender de novo' : 'Estender') : (done ? 'Gerar loop de novo' : 'Gerar loop')}</button>
-    </div>`;
-}
-
-function bindExtend(el, n) {
-  el.querySelectorAll('[data-k]').forEach((inp) => {
-    const ev = inp.tagName === 'TEXTAREA' ? 'input' : 'change';
-    inp.addEventListener(ev, () => {
-      const k = inp.dataset.k;
-      n[k] = ['seconds', 'loopSeconds'].includes(k) ? +inp.value : inp.value;
-      save();
-      if (['op', 'loopMode'].includes(k)) renderNode(n);
-    });
-  });
-  bindDirectionCard(el, n);
-  el.querySelector('[data-act=extend]')?.addEventListener('click', () => (n.op === 'loop' ? runLoop(n) : runExtend(n)).catch((err) => toast(err.message)));
-}
-
-const directionLayersOf = (n) => (n.direction?.layers || []).filter((l) => l.shapes.length || l.prompt.trim())
-  .map((l) => ({ color: l.color, label: l.label, prompt: l.prompt, shapes: l.shapes }));
-
-// Continuação com IA: último frame do clipe -> modelo com quadro inicial -> une com o original.
-async function runExtend(n) {
-  const src = videoOf(incoming(n.id)[0]);
-  if (!src) return toast('Ligue um vídeo na entrada');
-  if (n.status === 'running') return;
-  let job;
-  try {
-    job = await api('/api/video/extend', { node_id: n.id, name: n.name, source_url: src, seconds: +n.seconds,
-      transition: n.transition, prompt: n.prompt || '', direction_layers: directionLayersOf(n), model: n.model || 'auto' });
-  } catch (err) {
-    if (/Use o Loop/.test(err.message)) { n.noStartModel = true; renderNode(n); }
-    Object.assign(n, { status: 'error', error: err.message });
-    renderNode(n);
-    throw err;
-  }
-  n.noStartModel = false;
-  return startExtendJob(n, job, `${n.name}: gerando a continuação`);
-}
-
-// Loop sem IA (ffmpeg): ida e volta ou crossfade.
-async function runLoop(n) {
-  const src = videoOf(incoming(n.id)[0]);
-  if (!src) return toast('Ligue um vídeo na entrada');
-  if (n.status === 'running') return;
-  let job;
-  try {
-    job = await api('/api/video/loop', { node_id: n.id, name: n.name, source_url: src, mode: n.loopMode,
-      seconds: +n.loopSeconds, model: 'auto' });
-  } catch (err) {
-    Object.assign(n, { status: 'error', error: err.message });
-    renderNode(n);
-    throw err;
-  }
-  return startExtendJob(n, job, `${n.name}: gerando o loop`);
-}
-
-function startExtendJob(n, job, msg) {
-  n.extendMode = job.mode;
-  Object.assign(n, { jobId: job.id, status: 'running', progress: 0, error: null, cost: null,
-    stage: job.mode === 'local' ? 'ffmpeg' : 'enviado' });
-  renderNode(n);
-  save();
-  toast(msg);
-  return watchJob(n);
-}
-
 // ---------------- Upscale criativo ----------------
 
 function newUpscale(pos) {
@@ -1624,8 +1547,9 @@ function shotBody(n) {
     <div class="cv-sec">
       ${field('Modelo de vídeo', modelSelect('model', 'video', n.model, frame ? { i2v: true } : n.startMode === 'text' ? { t2v: true } : {},
         frame || n.startMode === 'still' || !autoModel('video', { t2v: true }) ? { i2v: true } : { t2v: true }))}
+      ${audioToggle(n)}
       <div class="cv-plan">${plan.missing ? `<span class="err">${ic('alert')} ${esc(plan.missing)}</span>`
-        : `<span>${plan.steps.map((s) => `<i class="cv-step ${s.kind}">${ic(s.kind === 'image' ? 'image' : 'video')}${esc(s.m.label)}</i>`).join(ic('step-forward', 'sep'))}</span><b class="cv-cost">~${fmtTok(planCost(plan, n.duration))}</b>`}</div>
+        : `<span>${plan.steps.map((s) => `<i class="cv-step ${s.kind}" title="${esc(s.m.label)}">${ic(s.kind === 'image' ? 'image' : 'video')}${esc(s.m.label)}</i>`).join(ic('step-forward', 'sep'))}</span><b class="cv-cost">~${fmtTok(planCost(plan, n.duration))}</b>`}</div>
       ${noRefsWarning(n)}
     </div>
     <div class="cv-row4">
@@ -1659,7 +1583,7 @@ function imageGenBody(n) {
     <div class="cv-sec">
       ${field('Modelo de imagem', modelSelect('model', 'image', n.model, refs ? {} : { t2i: true }))}
       <div class="cv-plan">${plan.missing ? `<span class="err">${ic('alert')} ${esc(plan.missing)}</span>`
-        : `<span><i class="cv-step image">${ic('image')}${esc(m.label)}</i>${refs && !m.caps.refs ? ' <span class="cv-warn">não usa referências</span>' : ''}</span><b class="cv-cost">${costLabel(m)}</b>`}</div>
+        : `<span><i class="cv-step image" title="${esc(m.label)}">${ic('image')}${esc(m.label)}</i>${refs && !m.caps.refs ? ' <span class="cv-warn">não usa referências</span>' : ''}</span><b class="cv-cost">${costLabel(m)}</b>`}</div>
       ${imageRefsWarning(m, refs)}
     </div>
     <div class="cv-row3">
@@ -1721,7 +1645,8 @@ function bindShot(el, n) {
   el.querySelectorAll('[data-k]').forEach((inp) => {
     const ev = inp.tagName === 'TEXTAREA' ? 'input' : 'change';
     inp.addEventListener(ev, () => {
-      n[inp.dataset.k] = ['duration', 'variants'].includes(inp.dataset.k) ? +inp.value : inp.value;
+      if (inp.type === 'checkbox') n[inp.dataset.k] = inp.checked;
+      else n[inp.dataset.k] = ['duration', 'variants'].includes(inp.dataset.k) ? +inp.value : inp.value;
       if (['aspect', 'duration'].includes(inp.dataset.k)) n.autoKey = null;
       save();
       if (inp.tagName === 'SELECT') renderNode(n);
@@ -1971,6 +1896,7 @@ function shotPayload(n, ap) {
     ref_image_urls: refsOf(n),
     compose: composeOn(n),
     direction_image_url: n.gen !== 'image' && videoTakesRefs(n) ? diagramOf(n) : null,
+    generate_audio: n.gen !== 'image' && !!n.genAudio && videoSupportsAudio(n),  // modelo sem suporte: ignorado
   };
 }
 
