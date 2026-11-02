@@ -16,7 +16,10 @@ const DZ_COLORS = {
   red: { hex: '#f87171', label: 'VERMELHO' },
   blue: { hex: '#60a5fa', label: 'AZUL' },
   white: { hex: '#f8fafc', label: 'BRANCO' },
+  light: { hex: '#fbbf24', label: 'LUZ' },  // seta de direção da luz (modo Relight)
 };
+const arrowColor = (c) => c === 'camera' || c === 'light';  // essas linhas têm seta no fim
+const PAINT_COLORS = Object.keys(DZ_COLORS).filter((c) => !['camera', 'light'].includes(c));
 const DZ_PLACEHOLDER = {
   camera: 'O que a câmera faz? Ex.: começa aberta, avança devagar até a garrafa e sobe até o logo.',
   element: 'O que este elemento faz? Ex.: a bola vai levemente para a direita.',
@@ -101,7 +104,7 @@ function drawDirectionThumb(canvas, n) {
   img.onload = () => {
     const s = Math.max(W / img.width, H / img.height);
     g.drawImage(img, (W - img.width * s) / 2, (H - img.height * s) / 2, img.width * s, img.height * s);
-    (n.direction?.layers || []).forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, 1.2, l.color === 'camera')));
+    (n.direction?.layers || []).forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, 1.2, arrowColor(l.color))));
   };
   img.src = frame;
 }
@@ -132,7 +135,7 @@ function openDirection(n) {
   const frame = startFrameOf(n);
   if (!frame) return;
   dz.mode = 'direction';
-  sketchChrome(false);
+  setChrome('camera');
   dz.node = n;
   dz.frame = frame;
   const saved = n.direction;
@@ -168,7 +171,7 @@ function openSketch(n) {
   dz.result = null;
   dz.tool = 'draw';
   dz.history = [];
-  sketchChrome(true);
+  setChrome('sketch');
   $('#dzTitle').textContent = n.name;
   dz.img = new Image();
   dz.img.onload = () => { dzSize(); dzRender(); };
@@ -181,14 +184,21 @@ function openSketch(n) {
 }
 
 // Esconde o que é só de câmera no modo de regerar e troca os rótulos do editor.
-function sketchChrome(on) {
-  $('#dzInterpret').hidden = on;
-  $('#dzInterpret').closest('.dz-res-box').hidden = on;
-  $('#dzHelpBtn').hidden = on;
-  $('#dzHelp').hidden = on || !dz.help;
-  $('#dzSave').lastChild.textContent = on ? ' Regerar imagem' : ' Salvar';
+const CHROME = {
+  camera: { sub: 'Câmera e movimento · desenhe no frame', save: 'Salvar' },
+  sketch: { sub: 'Desenhar para regerar · marque o que muda', save: 'Regerar imagem' },
+  light: { sub: 'Direção da luz · arraste a seta de onde vem a luz', save: 'Usar esta luz' },
+};
+// Cada modo do editor esconde o que não serve a ele (câmera, interpretação) e troca os rótulos.
+function setChrome(mode) {
+  const plain = mode !== 'camera';
+  $('#dzInterpret').hidden = plain;
+  $('#dzInterpret').closest('.dz-res-box').hidden = plain;
+  $('#dzHelpBtn').hidden = plain;
+  $('#dzHelp').hidden = plain || !dz.help;
+  $('#dzSave').lastChild.textContent = ` ${CHROME[mode].save}`;
   const small = document.querySelector('.dz-title small');
-  if (small) small.textContent = on ? 'Desenhar para regerar · marque o que muda' : 'Câmera e movimento · desenhe no frame';
+  if (small) small.textContent = CHROME[mode].sub;
 }
 
 function dzSize() {
@@ -221,7 +231,7 @@ function setActive(color) {
 }
 
 function addElement() {
-  const free = Object.keys(DZ_COLORS).find((c) => c !== 'camera' && !layerOf(c));
+  const free = PAINT_COLORS.find((c) => !layerOf(c));
   if (!free) return toast('Todas as cores já estão em uso');
   dzPush();
   dz.layers.push({ color: free, label: DZ_COLORS[free].label, prompt: '', shapes: [] });
@@ -318,8 +328,8 @@ function dzRender() {
   const g = cvs.getContext('2d');
   const W = cvs.width, H = cvs.height, d = devicePixelRatio;
   g.clearRect(0, 0, W, H);
-  dz.layers.forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, d * (l.color === dz.active ? 1.1 : 0.9), l.color === 'camera')));
-  if (dz.stroke) paintShape(g, { type: 'path', points: dz.stroke }, DZ_COLORS[dz.active].hex, W, H, d * 1.1, dz.active === 'camera');
+  dz.layers.forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, d * (l.color === dz.active ? 1.1 : 0.9), arrowColor(l.color))));
+  if (dz.stroke) paintShape(g, { type: 'path', points: dz.stroke }, DZ_COLORS[dz.active].hex, W, H, d * 1.1, arrowColor(dz.active));
   dz.layers.forEach((l) => paintTag(g, l, W, H, d));
 }
 
@@ -347,7 +357,8 @@ function bindDzStage() {
       dzPush();
       let l = layerOf(dz.active);
       if (!l) { l = { color: dz.active, label: DZ_COLORS[dz.active].label, prompt: '', shapes: [] }; dz.layers.push(l); }
-      l.shapes.push(sh);
+      if (dz.mode === 'light') l.shapes = [{ type: 'path', points: sh.points }];  // uma seta só
+      else l.shapes.push(sh);
       dz.result = null;
       renderDzCards();
       renderDzResult();
@@ -378,17 +389,19 @@ function renderDzCards() {
   $('#dzCards').innerHTML = dz.layers.map((l) => {
     const c = DZ_COLORS[l.color];
     const cam = l.color === 'camera';
+    const light = l.color === 'light';
     const loops = l.shapes.filter((s) => s.type === 'loop').length, paths = l.shapes.length - loops;
     const shapesTxt = [loops && `${loops} círculo${loops > 1 ? 's' : ''}`, paths && `${paths} linha${paths > 1 ? 's' : ''}`].filter(Boolean).join(' · ') || 'nada desenhado';
     return `<div class="dz-card ${dz.active === l.color ? 'active' : ''}" data-color="${l.color}" data-st="--c:${c.hex}">
       <div class="dz-card-head">
-        <span class="dz-swatch"></span><b>${c.label}</b><small>${cam ? 'rota da câmera' : 'elemento'} · ${shapesTxt}</small>
+        <span class="dz-swatch"></span><b>${c.label}</b><small>${cam ? 'rota da câmera' : light ? 'direção da luz' : 'elemento'} · ${shapesTxt}</small>
         ${l.shapes.length ? `<button class="cv-hbtn" data-clear="${l.color}" title="Apagar traços desta cor" aria-label="Apagar traços desta cor">${ic('undo')}</button>` : ''}
-        ${cam ? '' : `<button class="cv-hbtn" data-remove="${l.color}" title="Remover elemento" aria-label="Remover elemento">${ic('trash')}</button>`}
+        ${cam || light ? '' : `<button class="cv-hbtn" data-remove="${l.color}" title="Remover elemento" aria-label="Remover elemento">${ic('trash')}</button>`}
       </div>
-      <textarea rows="${cam ? 3 : 2}" data-prompt="${l.color}" placeholder="${esc(cam ? DZ_PLACEHOLDER.camera : dz.mode === 'sketch' ? DZ_PLACEHOLDER.sketch : DZ_PLACEHOLDER.element)}">${esc(l.prompt)}</textarea>
+      <textarea rows="${cam ? 3 : 2}" data-prompt="${l.color}" ${light ? 'hidden' : ''} placeholder="${esc(cam ? DZ_PLACEHOLDER.camera : dz.mode === 'sketch' ? DZ_PLACEHOLDER.sketch : DZ_PLACEHOLDER.element)}">${esc(l.prompt)}</textarea>
       ${cam && !l.shapes.length ? '<small class="dz-tip">Desenhe em roxo por onde a câmera vai: o ponto é o começo e a seta, o fim.</small>' : ''}
-      ${!cam && !l.shapes.length ? '<small class="dz-tip">Circule o objeto ou puxe uma linha: o ponto cheio marca o começo e o anel vazio, o fim.</small>' : ''}
+      ${!cam && !light && !l.shapes.length ? '<small class="dz-tip">Circule o objeto ou puxe uma linha: o ponto cheio marca o começo e o anel vazio, o fim.</small>' : ''}
+      ${light && !l.shapes.length ? '<small class="dz-tip">Arraste a seta de onde vem a luz até para onde ela vai.</small>' : ''}
     </div>`;
   }).join('');
   document.querySelectorAll('.dz-card').forEach((card) => card.addEventListener('mousedown', (e) => {
@@ -408,7 +421,8 @@ function renderDzCards() {
     setTool('draw');
     renderDzCards(); renderDzResult(); dzRender();
   }));
-  $('#dzAddEl').disabled = Object.keys(DZ_COLORS).every((c) => layerOf(c));
+  $('#dzAddEl').disabled = PAINT_COLORS.every((c) => layerOf(c));
+  $('#dzAddEl').hidden = dz.mode === 'light';
   setTool(dz.tool);
 }
 
@@ -424,7 +438,7 @@ function annotatedImage() {
   const g = c.getContext('2d');
   g.drawImage(img, 0, 0, W, H);
   const k = W / 900;
-  dz.layers.forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, k * 1.3, l.color === 'camera')));
+  dz.layers.forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, k * 1.3, arrowColor(l.color))));
   dz.layers.forEach((l) => paintTag(g, l, W, H, k * 1.4));
   return c.toDataURL('image/jpeg', 0.86);
 }
@@ -488,7 +502,44 @@ async function saveSketch() {
   } finally { btn.disabled = false; }
 }
 
+// Modo Relight: a seta de luz vira o vetor da direção (origem = de onde a luz vem, ponta = para onde vai).
+function openLight(n) {
+  const src = frameOf(incoming(n.id)[0]);
+  if (!src) return toast('Ligue uma imagem na entrada');
+  dz.mode = 'light';
+  dz.node = n;
+  dz.frame = src;
+  const d = n.lightDir;
+  dz.layers = [{ color: 'light', label: DZ_COLORS.light.label, prompt: '', shapes: d ? [{ type: 'path', points: [[d[0], d[1]], [d[2], d[3]]] }] : [] }];
+  dz.active = 'light';
+  dz.result = null;
+  dz.tool = 'draw';
+  dz.history = [];
+  setChrome('light');
+  $('#dzStale').hidden = true;
+  $('#dzTitle').textContent = n.name;
+  dz.img = new Image();
+  dz.img.onload = () => { dzSize(); dzRender(); };
+  dz.img.src = src;
+  $('#dzImg').src = src;
+  $('#dzDialog').showModal();
+  renderDzCards();
+  renderDzResult();
+  setTool('draw');
+}
+
+function saveLight() {
+  const n = dz.node;
+  const sh = layerOf('light')?.shapes[0];
+  n.lightDir = sh ? [sh.points[0][0], sh.points[0][1], sh.points.at(-1)[0], sh.points.at(-1)[1]] : null;
+  renderNode(n);
+  save();
+  $('#dzDialog').close();
+  toast(n.lightDir ? 'Direção da luz salva' : 'Sem direção: a luz segue só o preset');
+}
+
 async function saveDirection() {
+  if (dz.mode === 'light') return saveLight();
   if (dz.mode === 'sketch') return saveSketch();
   const n = dz.node;
   const btn = $('#dzSave');
