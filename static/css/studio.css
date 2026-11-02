@@ -1029,3 +1029,8 @@ body.style-pixel .ug-bar i { background: repeating-linear-gradient(90deg, var(--
 
 /* esconde a página até as traduções carregarem (js/i18n.js); some sozinho em 1,5 s */
 html.i18n-wait body { visibility: hidden; }
+
+/* upscale: sliders de criatividade/semelhança */
+.cv-slider { display: grid; gap: 4px; margin: 6px 0; font-size: .78rem; }
+.cv-slider span { display: flex; justify-content: space-between; color: var(--muted); }
+.cv-slider input[type=range] { width: 100%; accent-color: var(--accent); }

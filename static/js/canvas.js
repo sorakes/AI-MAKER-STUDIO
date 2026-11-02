@@ -8,9 +8,9 @@ const cv = { nodes: [], edges: [], pan: { x: 60, y: 40 }, zoom: 0.9, sel: null, 
 
 // Cada área tem o próprio canvas e a própria paleta de nós.
 const WS_PALETTE = {
-  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'review', 'montage'],
-  character: ['chargen', 'save', 'sheet', 'image'],
-  product: ['prodgen', 'save', 'sheet', 'image'],
+  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'review', 'montage'],
+  character: ['chargen', 'save', 'sheet', 'image', 'upscale'],
+  product: ['prodgen', 'save', 'sheet', 'image', 'upscale'],
 };
 const WS_EMPTY = {
   video: 'Seu estúdio está vazio.<br>Envie fotos/vídeos ou adicione um nó <b>Gerar vídeo</b>, <b>Gerar imagem</b> ou <b>Roteiro</b>.',
@@ -437,6 +437,12 @@ const PALETTE = {
       + 'A saída é uma imagem: 1º frame de um novo vídeo, referência (R) ou entrada A/B de uma transição.',
     make: (pos) => newFrameNode(pos),
   },
+  upscale: {
+    icon: 'zoom-in', title: 'Upscale criativo', tag: 'imagem → maior',
+    what: 'Amplia uma imagem 2x ou 4x. Com um modelo de imagem que aceite referências, a IA acrescenta detalhe (criatividade) mantendo a cena (semelhança). Sem esse modelo, é um upscale simples.',
+    how: 'Ligue uma imagem na entrada → escolha o fator, a criatividade e a semelhança → Ampliar. A saída pode seguir para um vídeo ou outro nó.',
+    make: (pos) => newUpscale(pos),
+  },
   review: {
     icon: 'eye', title: 'Aprovação', tag: 'pausa o fluxo',
     what: 'Mostra grande a saída de um nó e segura o fluxo até alguém aprovar.',
@@ -513,6 +519,7 @@ function frameOf(n) {
   if (!n) return null;
   if (n.type === 'transition') return n.output?.last_frame || null;
   if (n.type === 'frame') return extractedFrame(n);
+  if (n.type === 'upscale') return n.output?.url || null;
   if (n.type === 'review') return frameOf(incoming(n.id)[0]);
   if (n.type === 'media') return n.media.kind === 'video' ? n.media.last_frame : n.media.url;
   if (n.type === 'shot') return n.output?.last_frame || (n.output?.kind === 'image' ? n.output.url : null);
@@ -770,6 +777,7 @@ const KIND = {
   chargen: { label: 'Personagem', icon: 'user' }, prodgen: { label: 'Produto', icon: 'logo' },
   pose: { label: 'Posição', icon: 'frame' }, sheet: { label: 'Spritesheet', icon: 'dashboard' },
   save: { label: 'Salvar', icon: 'check-circle' },
+  upscale: { label: 'Upscale', icon: 'zoom-in' },
 };
 
 function nodeEl(n) {
@@ -793,7 +801,7 @@ function nodeEl(n) {
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
       <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
-    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
+    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
       ? '<span class="cv-port in" data-port="a" title="Entrada A: vídeo ou imagem de onde a transição sai"><i>A</i></span><span class="cv-port in port-b" data-port="b" title="Entrada B: vídeo ou imagem onde a transição chega"><i>B</i></span>'
       : n.type === 'shot'
@@ -818,6 +826,7 @@ function nodeEl(n) {
   if (n.type === 'montage') bindMontage(el, n);
   if (n.type === 'transition') bindTransition(el, n);
   if (n.type === 'frame') bindFrameNode(el, n);
+  if (n.type === 'upscale') bindUpscale(el, n);
   if (n.type === 'review') bindReview(el, n);
   if (n.type === 'brief') bindBrief(el, n);
   if (n.type === 'cast') bindCast(el, n);
@@ -828,6 +837,80 @@ function nodeEl(n) {
   bindPreview(el, n);
   applySpawn(el, n);
   return el;
+}
+
+// ---------------- Upscale criativo ----------------
+
+function newUpscale(pos) {
+  return { id: uid('up'), type: 'upscale', name: t('Upscale'), factor: 2, creativity: 30, similarity: 70, prompt: '',
+    model: 'auto', status: 'idle', output: null, takes: [], jobId: null, upscaleMode: null, ...pos };
+}
+
+const upscaleSource = (n) => frameOf(incoming(n.id)[0]);
+
+const sliderField = (k, label, v) => `<label class="cv-slider"><span>${label} <output data-out="${k}">${v}</output></span>
+  <input type="range" min="0" max="100" step="5" value="${v}" data-k="${k}" aria-label="${label}" aria-valuetext="${v}"></label>`;
+
+function upscaleModeNote(n) {
+  if (n.upscaleMode === 'local') return 'Upscale simples (Pillow): sem modelo criativo ativo.';
+  if (n.upscaleMode === 'ai') return 'Upscale criativo com IA.';
+  return 'Com um modelo de imagem que aceite referências: upscale criativo. Sem ele: upscale simples (Pillow).';
+}
+
+function upscaleBody(n) {
+  const src = upscaleSource(n);
+  const done = !!n.output;
+  return `
+    ${previewBlock(n, { placeholder: { icon: 'zoom-in', text: src ? '' : 'Ligue uma imagem na entrada' }, ghost: src })}
+    ${src ? '' : `<div class="cv-meta"><span class="err">${ic('alert')} Ligue uma imagem na entrada</span></div>`}
+    ${field('Fator', `<select data-k="factor">${[2, 4].map((f) => opt(f, n.factor, `${f}x`)).join('')}</select>`)}
+    ${sliderField('creativity', 'Criatividade', n.creativity)}
+    ${sliderField('similarity', 'Semelhança', n.similarity)}
+    ${field('Nota (opcional)', `<textarea data-k="prompt" rows="2" maxlength="1000" placeholder="Ex.: mantenha o rótulo legível">${esc(n.prompt)}</textarea>`)}
+    <div class="cv-meta"><span>${esc(upscaleModeNote(n))}</span></div>
+    ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
+    <div class="cv-foot">
+      <button class="btn primary" data-act="upscale" ${n.status === 'running' || !src ? 'disabled' : ''}>${ic('zoom-in')} ${done ? 'Ampliar de novo' : 'Ampliar'}</button>
+    </div>`;
+}
+
+function bindUpscale(el, n) {
+  el.querySelectorAll('[data-k]').forEach((inp) => {
+    const range = inp.type === 'range';
+    const ev = range || inp.tagName === 'TEXTAREA' ? 'input' : 'change';
+    inp.addEventListener(ev, () => {
+      const k = inp.dataset.k;
+      n[k] = range || k === 'factor' ? +inp.value : inp.value;
+      if (range) {
+        el.querySelector(`output[data-out="${k}"]`).textContent = inp.value;
+        inp.setAttribute('aria-valuetext', inp.value);
+      }
+      save();
+    });
+  });
+  el.querySelector('[data-act=upscale]')?.addEventListener('click', () => runUpscale(n).catch((err) => toast(err.message)));
+}
+
+// Upscale: entra na fila de jobs (mesmas cotas e tokens dos demais renders). A versão anterior fica nas versões.
+async function runUpscale(n) {
+  const src = upscaleSource(n);
+  if (!src) return toast('Ligue uma imagem na entrada');
+  if (n.status === 'running') return;
+  let job;
+  try {
+    job = await api('/api/image/upscale', { node_id: n.id, name: n.name, source_url: src, factor: +n.factor,
+      creativity: +n.creativity, similarity: +n.similarity, prompt: n.prompt || '', model: n.model || 'auto' });
+  } catch (err) {
+    Object.assign(n, { status: 'error', error: err.message });
+    renderNode(n);
+    throw err;
+  }
+  n.upscaleMode = job.mode;
+  Object.assign(n, { jobId: job.id, status: 'running', progress: 0, error: null, stage: job.mode === 'local' ? 'upscale simples' : 'enviado', cost: null });
+  renderNode(n);
+  save();
+  toast(job.mode === 'local' ? `${n.name}: upscale simples (sem modelo criativo)` : `${n.name}: upscale criativo`);
+  return watchJob(n);
 }
 
 // ---------------- Prévia, versões e regerar ----------------
