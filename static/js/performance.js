@@ -25,7 +25,7 @@ function performanceBody(n) {
   return `
     ${previewBlock(n, { placeholder: { icon: 'user', text: src ? '' : 'Ligue a imagem do personagem na entrada' } })}
     ${src ? '' : `<div class="cv-meta"><span class="err">${ic('alert')} Ligue a imagem do personagem na entrada</span></div>`}
-    <div class="cv-warn">${ic('alert')} <span>O modelo gera a fala e a boca com voz própria. Um áudio ligado só define a duração: a fala não sincroniza ao áudio enviado.</span></div>
+    <div class="cv-warn perf-limit">${ic('alert')} <span><b>Limitação:</b> a fala e a boca são geradas pelo modelo, com voz própria. Não sincronizam com um áudio enviado, e o áudio ligado não é usado na fala: só define a duração. A imagem é ajustada ao formato escolhido (fundo desfocado).</span></div>
     ${field('Texto da fala', `<textarea data-k="text" rows="2" maxlength="300" placeholder="Ex.: Bem-vindo à nova coleção de verão.">${esc(n.text)}</textarea>`)}
     ${field('Expressão e movimento (opcional)', `<input data-k="motion" maxlength="200" value="${esc(n.motion)}" placeholder="Ex.: sorri com entusiasmo">`)}
     <div class="cv-row3">

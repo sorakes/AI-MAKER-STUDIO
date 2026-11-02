@@ -41,7 +41,10 @@ def test_fala_has_one_send_path_real_model_first_then_tts_fallback():
 
 
 def test_honest_notes_are_on_the_node():
-    assert "não sincroniza ao áudio enviado" in _text(JS / "performance.js")
+    src = _text(JS / "performance.js")
+    assert "sincronizam com um áudio enviado" in src and "só define a duração" in src
+    assert "A imagem é ajustada ao formato escolhido" in src
+    assert "perf-limit" in src
     assert "Modelo real: fala o texto com voz própria" in _text(JS / "canvas.js")
 
 
