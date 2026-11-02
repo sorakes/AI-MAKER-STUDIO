@@ -17,7 +17,7 @@ import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from . import db, lipsync, media, outpaint, promptgen, providers, registry, relight, storage, upscale, usage
+from . import db, extend, lipsync, media, montage, outpaint, promptgen, providers, registry, relight, storage, upscale, usage
 from .auth import CURRENT, public_user
 
 JOBS: dict[str, dict] = {}
@@ -47,6 +47,8 @@ class RenderRequest(BaseModel):
     upscale_factor: int = 0  # gen=upscale: fator final (2 ou 4); a saída da IA é levada a esse tamanho
     local_op: dict = Field(default_factory=dict)  # gen=relight/style/outpaint/inpaint: operação do ajuste local (Pillow)
     composite: dict = Field(default_factory=dict)  # outpaint/inpaint: recompõe o original sobre o que a máscara protege
+    extend_source_url: str = ""  # gen=video com quadro inicial de extensão: une o clipe original com a continuação
+    extend_transition: str = "none"  # como unir: none (corte) | dissolve
 
 
 def _step(kind: str, m: dict, label: str) -> dict:
@@ -59,6 +61,8 @@ def plan(user: dict, r: RenderRequest) -> list[dict]:
     if r.gen == "upscale":  # IA com referências se houver modelo; senão upscale simples local
         m = upscale.pick(user, r.model)
         return [_step("image", m or upscale.LOCAL, "Upscale criativo" if m else "Upscale simples")]
+    if r.gen == "loop":  # loop sem IA: ida e volta ou crossfade, sempre local (ffmpeg)
+        return [_step("video", relight.local_model("Loop (sem IA)"), "Loop (sem IA)")]
     if r.gen == "lipsync":  # lip sync real se houver modelo habilitado; senão animação simples com o áudio
         m = lipsync.pick(user, r.model)
         label = "Fala com IA" if m else "Animação simples"
@@ -431,9 +435,11 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     url = None
                 elif m["provider"] == "local":  # upscale/relight/estilo simples: Pillow, sem provedor
                     src = storage.resolve(spec.ref_image_urls[0], user)
-                    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}{'.mp4' if spec.gen == 'lipsync' else '.png'}"
+                    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}{'.mp4' if spec.gen in ('lipsync', 'loop') else '.png'}"
                     if spec.gen == "upscale":
                         await asyncio.to_thread(upscale.resize_file, src, spec.upscale_factor, dest)
+                    elif spec.gen == "loop":
+                        await asyncio.to_thread(extend.apply_loop, spec.local_op, src, dest)
                     elif spec.gen == "lipsync":
                         audio = storage.resolve(spec.local_op["audio_url"], user)
                         await asyncio.to_thread(lipsync.apply_local, spec.local_op, src, audio, dest)
@@ -460,6 +466,14 @@ async def _run(job: dict, user: dict, resume: bool = False):
                         await asyncio.to_thread(outpaint.finish_ai, storage.resolve(st["output"]),
                                                 storage.resolve(c["original_url"], user), storage.resolve(c["keep_mask_url"], user),
                                                 tuple(c["size"]), storage.resolve(st["output"]))
+                if spec.extend_source_url:  # continuação pronta: une com o clipe original (corte ou dissolve)
+                    job["detail"] = "juntando com o clipe original"
+                    items = [{"type": "clip", "path": storage.resolve(spec.extend_source_url, user)}]
+                    if spec.extend_transition == "dissolve":
+                        items.append({"type": "transition", "kind": "dissolve", "duration": 0.5})
+                    items.append({"type": "clip", "path": storage.resolve(st["output"], user)})
+                    joined = await asyncio.to_thread(montage.assemble_sequence, job["user_id"], items, spec.aspect, None)
+                    st["output"] = storage.to_url(joined)
             except Exception as e:
                 await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], status="error",
                           detail={"job": job["id"], "error": str(e)[:400]})
