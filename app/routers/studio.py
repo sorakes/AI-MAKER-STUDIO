@@ -1,13 +1,17 @@
 """API do estúdio: tudo é do usuário logado (arquivos, jobs, canvas)."""
 import asyncio
+import base64
+import io
 import json
 import re
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, camera, db, groups, sprites, direction, director, jobs, llm, media, montage, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, camera, db, groups, sprites, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -212,6 +216,81 @@ async def style_transfer(req: relight.StyleRequest, user: dict = Depends(current
         node_id=req.node_id, name=req.name, gen="style", model=req.model, prompt=prompt, keyframe_prompt=prompt,
         ref_image_urls=[req.source_url, req.style_url],  # ordem importa: imagem 1 = original, imagem 2 = estilo
         local_op={"kind": "style", "strength": req.strength}))
+
+
+def _decode_mask(data_url: str) -> bytes:
+    """Máscara vem como data URL PNG (branco = região a editar)."""
+    prefix = "data:image/png;base64,"
+    if not data_url.startswith(prefix):
+        raise HTTPException(400, "Máscara inválida: envie um PNG")
+    try:
+        raw = base64.b64decode(data_url[len(prefix):], validate=True)
+    except ValueError as e:
+        raise HTTPException(400, "Máscara inválida: base64 quebrado") from e
+    if len(raw) > 8 * 2**20:
+        raise HTTPException(400, "Máscara grande demais")
+    return raw
+
+
+@router.post("/image/outpaint")
+async def outpaint_image(req: outpaint.OutpaintRequest, user: dict = Depends(current_user)):
+    """Expandir: a IA preenche o quadro novo; a original volta por cima do próprio quadro (recomposição)."""
+    await _image_source(req.source_url, user)
+    src_path = storage.resolve(req.source_url, user)
+    tok = secrets.token_hex(4)
+    base = storage.user_dir(user["id"], "renders")
+
+    def build():
+        with Image.open(src_path) as im:
+            src = im.convert("RGB")
+        W, H, x, y = outpaint.layout(src.width, src.height, req.aspect, req.anchor)
+        canvas, keep = base / f"edit_{tok}_canvas.png", base / f"edit_{tok}_keep.png"
+        outpaint.canvas_image(src, W, H, x, y).save(canvas)
+        outpaint.keep_for_outpaint(W, H, x, y, src.width, src.height).save(keep)
+        return W, H, x, y, canvas, keep
+
+    W, H, x, y, canvas, keep = await asyncio.to_thread(build)
+    canvas_url, keep_url = storage.to_url(canvas), storage.to_url(keep)
+    prompt = outpaint.outpaint_prompt(req, W, H, x, y)
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="outpaint", model=req.model, prompt=prompt, keyframe_prompt=prompt,
+        ref_image_urls=[canvas_url],  # a IA vê o quadro com a área nova marcada em cinza
+        local_op={"kind": "outpaint", "W": W, "H": H, "x": x, "y": y, "original_url": req.source_url},
+        composite={"original_url": canvas_url, "keep_mask_url": keep_url, "size": [W, H]}))
+
+
+@router.post("/image/inpaint")
+async def inpaint_image(req: outpaint.InpaintRequest, user: dict = Depends(current_user)):
+    """Editar região: a IA recebe a imagem com a região em magenta; o resultado só muda dentro da máscara."""
+    await _image_source(req.source_url, user)
+    src_path = storage.resolve(req.source_url, user)
+    raw = _decode_mask(req.mask)
+    tok = secrets.token_hex(4)
+    base = storage.user_dir(user["id"], "renders")
+
+    def build():
+        with Image.open(src_path) as im:
+            src = im.convert("RGB")
+        with Image.open(io.BytesIO(raw)) as mk:
+            m = mk.convert("L").resize(src.size).point(lambda v: 255 if v > 127 else 0)
+        if m.getbbox() is None:
+            raise ValueError("Pinte a região que será editada")
+        marked, keep, mask = base / f"edit_{tok}_marked.png", base / f"edit_{tok}_keep.png", base / f"edit_{tok}_mask.png"
+        outpaint.marked_image(src, m).save(marked)
+        outpaint.keep_for_inpaint(m).save(keep)
+        m.save(mask)
+        return src.size, marked, keep, mask
+
+    try:
+        size, marked, keep, mask = await asyncio.to_thread(build)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    prompt = outpaint.inpaint_prompt(req)
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="inpaint", model=req.model, prompt=prompt, keyframe_prompt=prompt,
+        ref_image_urls=[storage.to_url(marked)],  # magenta na região: a IA troca só ela
+        local_op={"kind": "inpaint", "original_url": req.source_url, "mask_url": storage.to_url(mask)},
+        composite={"original_url": req.source_url, "keep_mask_url": storage.to_url(keep), "size": list(size)}))
 
 
 @router.post("/direction/interpret")
