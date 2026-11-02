@@ -134,5 +134,9 @@ def test_performance_job_sends_the_right_body_and_returns_a_video(login, make_us
     body = sent["body"]
     assert body["model"] == performance.PERF_MODEL_ID and body["duration"] == 4 and body["resolution"] == "480p"
     assert body["generate_audio"] is True and "Bem-vindo à coleção de verão" in body["prompt"]
-    assert "data:image" in json.dumps(body)  # a imagem do personagem vai como dado, nunca por URL pública
+    frame_uri = next(f["image_url"]["url"] for f in body["frame_images"] if f.get("frame_type") == "first_frame")
+    assert frame_uri.startswith("data:image")  # a imagem vai como dado, nunca por URL pública
+    import base64, io
+    frame = Image.open(io.BytesIO(base64.b64decode(frame_uri.split(",", 1)[1])))
+    assert abs(frame.width / frame.height - 16 / 9) < 0.01  # o quadro inicial sai no formato pedido (16:9)
     assert abs(media.probe(storage.resolve(job["output"], me))["duration"] - 4.0) < 0.3
