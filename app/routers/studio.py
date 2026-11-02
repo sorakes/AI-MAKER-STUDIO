@@ -276,17 +276,25 @@ async def inpaint_image(req: outpaint.InpaintRequest, user: dict = Depends(curre
         outpaint.marked_image(src, m).save(marked)
         outpaint.keep_for_inpaint(m).save(keep)
         m.save(mask)
-        return src.size, marked, keep, mask
+        ident, ident_usd = outpaint.identify_region(src, m)  # visão: o que está dentro do contorno (cacheado no job)
+        return src.size, marked, keep, mask, ident, ident_usd
 
     try:
-        size, marked, keep, mask = await asyncio.to_thread(build)
+        size, marked, keep, mask, ident, ident_usd = await asyncio.to_thread(build)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    prompt = outpaint.inpaint_prompt(req, reinforce=req.reinforce)
+    prompt = outpaint.inpaint_prompt(req, reinforce=req.reinforce, ident=ident)
+    if ident and req.input_mode == "clean":
+        refs = [req.source_url]  # original limpa: a IA apaga/troca o objeto descrito, sem magenta na imagem
+    elif ident and req.input_mode == "clean_mask":
+        refs = [req.source_url, storage.to_url(mask)]  # original + máscara como 2ª referência
+    else:  # marked, ou sem identificação: a região magenta é a única pista
+        refs = [storage.to_url(marked)]
     return await _image_job(user, jobs.RenderRequest(
         node_id=req.node_id, name=req.name, gen="inpaint", model=req.model, prompt=prompt, keyframe_prompt=prompt,
-        ref_image_urls=[storage.to_url(marked)],  # magenta na região: a IA troca só ela
-        local_op={"kind": "inpaint", "original_url": req.source_url, "mask_url": storage.to_url(mask)},
+        ref_image_urls=refs,
+        local_op={"kind": "inpaint", "original_url": req.source_url, "mask_url": storage.to_url(mask),
+                  "ident": ident, "ident_usd": ident_usd, "input_mode": req.input_mode},
         composite={"original_url": req.source_url, "keep_mask_url": storage.to_url(keep), "size": list(size)}), edit=True)
 
 

@@ -208,7 +208,8 @@ def test_inpaint_marking_never_leaks_into_the_result(me, ai_available, monkeypat
         assert out.size == (64, 48)
         assert out.getpixel((0, 0)) == (30, 120, 200)   # fora da máscara: idêntico ao original
         assert out.getpixel((63, 47)) == (30, 120, 200)
-        assert out.getpixel((12, 12)) == outpaint.MARK  # dentro: é o que a IA devolveu (magenta), fora nunca
+        # dentro: a região mudou (é o que a IA devolveu, com a cor ajustada ao entorno e a borda esfumada)
+        assert out.getpixel((12, 12)) != (30, 120, 200)
 
 
 def test_inpaint_with_ai_replaces_the_masked_region_only(me, ai_available, monkeypatch, login):
@@ -222,7 +223,8 @@ def test_inpaint_with_ai_replaces_the_masked_region_only(me, ai_available, monke
     assert r.status_code == 200, r.text
     asyncio.run(jobs._run(started[0], me))
     with Image.open(storage.resolve(started[0]["output"], me)) as out:
-        assert out.getpixel((15, 15)) == GREEN           # dentro da máscara: a IA
+        inside = out.getpixel((15, 15))                  # dentro da máscara: a IA, cor ajustada ao entorno
+        assert sum(abs(a - b) for a, b in zip(inside, GREEN)) < sum(abs(a - b) for a, b in zip((30, 120, 200), GREEN))
         assert out.getpixel((0, 0)) == (30, 120, 200)    # fora: o original
 
 
