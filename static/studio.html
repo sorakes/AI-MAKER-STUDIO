@@ -103,12 +103,14 @@
       <button class="btn small ghost dz-tool" id="maskBrush" title="Pincel (B)" aria-label="Pincel" aria-pressed="true"><i data-ic="route"></i><span>Pincel</span></button>
       <button class="btn small ghost dz-tool" id="maskEraser" title="Borracha (E)" aria-label="Borracha" aria-pressed="false"><i data-ic="x"></i><span>Borracha</span></button>
       <label class="mask-size"><span>Tamanho</span><input type="range" id="maskSize" min="4" max="120" value="28" aria-label="Tamanho do pincel"></label>
+      <label class="mask-fill"><input type="checkbox" id="maskFill" checked aria-describedby="maskFillHelp"> <span>Preencher dentro do contorno</span></label>
       <button class="btn small ghost" id="maskUndo" title="Desfazer (Ctrl+Z)" aria-label="Desfazer"><i data-ic="undo"></i> Desfazer</button>
       <button class="btn small ghost" id="maskClear" title="Apagar a máscara" aria-label="Apagar máscara"><i data-ic="trash"></i> Limpar</button>
       <span class="dz-sep"></span>
       <button class="btn small ghost" id="maskCancel">Cancelar</button>
       <button class="btn small primary" id="maskSave"><i data-ic="check"></i> Usar esta região</button>
     </div>
+    <small class="dz-hint" id="maskFillHelp">Feche o traço em volta do objeto: o que está dentro entra na região. Desligue para usar só o traço pintado.</small>
   </div>
   <div class="dz-body">
     <div class="dz-stage" id="maskStage">

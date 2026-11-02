@@ -32,7 +32,8 @@ def test_mask_dialog_is_wired_in_the_studio_page():
 
 def test_mask_editor_exports_black_and_white_and_has_undo():
     mask = _text(JS / "mask.js")
-    assert "function maskDataUrl" in mask and "v = d.data[i + 3] > 127 ? 255 : 0" in mask
+    assert "function maskDataUrl" in mask and "d[i] > 127" in mask  # pintura lida pelo alfa
+    assert "function fillEnclosed" in mask and "fillEnclosed(bin, W, H)" in mask  # contorno fechado vira região
     assert "function undoMask" in mask and "destination-out" in mask  # desfazer e borracha
     assert "lineWidth = mk.size" in mask or "lineWidth = mk.size * scale" in mask  # tamanho ajustável
 
