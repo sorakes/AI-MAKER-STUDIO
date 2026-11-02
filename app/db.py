@@ -241,6 +241,11 @@ async def aone(sql: str, args=()) -> dict | None:
     return dict(r) if r else None
 
 
+async def aget_setting(key: str, default=None):
+    r = await aone("SELECT value FROM settings WHERE key = ?", (key,))
+    return json.loads(r["value"]) if r else default
+
+
 async def arun(sql: str, args=()) -> int:
     ac = await _aget()
     async with ac.lock:
