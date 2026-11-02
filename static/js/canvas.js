@@ -8,9 +8,9 @@ const cv = { nodes: [], edges: [], pan: { x: 60, y: 40 }, zoom: 0.9, sel: null, 
 
 // Cada área tem o próprio canvas e a própria paleta de nós.
 const WS_PALETTE = {
-  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'review', 'montage'],
-  character: ['chargen', 'save', 'sheet', 'image', 'upscale', 'relight'],
-  product: ['prodgen', 'save', 'sheet', 'image', 'upscale', 'relight'],
+  video: ['brief', 'cast', 'video', 'image', 'transition', 'frame', 'upscale', 'relight', 'edit', 'review', 'montage'],
+  character: ['chargen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit'],
+  product: ['prodgen', 'save', 'sheet', 'image', 'upscale', 'relight', 'edit'],
 };
 const WS_EMPTY = {
   video: 'Seu estúdio está vazio.<br>Envie fotos/vídeos ou adicione um nó <b>Gerar vídeo</b>, <b>Gerar imagem</b> ou <b>Roteiro</b>.',
@@ -437,6 +437,12 @@ const PALETTE = {
       + 'A saída é uma imagem: 1º frame de um novo vídeo, referência (R) ou entrada A/B de uma transição.',
     make: (pos) => newFrameNode(pos),
   },
+  edit: {
+    icon: 'sparkles', title: 'Expandir / editar região', tag: 'quadro maior ou região trocada',
+    what: 'Expande a imagem para outro aspecto (a IA preenche as bordas) ou troca uma região pintada, mantendo o resto igual.',
+    how: 'Ligue a imagem na entrada. Em Expandir, escolha o aspecto e a posição da imagem. Em Editar região, pinte a área com o pincel e descreva o que colocar.',
+    make: (pos) => newEdit(pos),
+  },
   relight: {
     icon: 'sparkles', title: 'Relight / Estilo', tag: 'luz ou estilo de outra imagem',
     what: 'Muda a luz de uma imagem (dourada, estúdio, neon, noite, contraluz) ou aplica o estilo de uma segunda imagem. A composição e as pessoas ficam como estão.',
@@ -525,7 +531,7 @@ function frameOf(n) {
   if (!n) return null;
   if (n.type === 'transition') return n.output?.last_frame || null;
   if (n.type === 'frame') return extractedFrame(n);
-  if (n.type === 'upscale' || n.type === 'relight') return n.output?.url || null;
+  if (['upscale', 'relight', 'edit'].includes(n.type)) return n.output?.url || null;
   if (n.type === 'review') return frameOf(incoming(n.id)[0]);
   if (n.type === 'media') return n.media.kind === 'video' ? n.media.last_frame : n.media.url;
   if (n.type === 'shot') return n.output?.last_frame || (n.output?.kind === 'image' ? n.output.url : null);
@@ -785,6 +791,7 @@ const KIND = {
   save: { label: 'Salvar', icon: 'check-circle' },
   upscale: { label: 'Upscale', icon: 'zoom-in' },
   relight: { label: 'Relight / Estilo', icon: 'sparkles' },
+  edit: { label: 'Expandir / editar', icon: 'sparkles' },
 };
 
 function nodeEl(n) {
@@ -808,7 +815,7 @@ function nodeEl(n) {
       ${n.type !== 'media' ? `<button class="cv-hbtn" data-act="dup" title="Duplicar nó" aria-label="Duplicar nó">${ic('copy')}</button>` : ''}
       <button class="cv-hbtn x" title="Remover nó" aria-label="Remover nó">${ic('x')}</button>
     </div>
-    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
+    <div class="cv-content">${{ media: mediaBody, shot: (x) => (x.gen === 'image' ? imageGenBody(x) : shotBody(x)), montage: montageBody, transition: transitionBody, frame: frameNodeBody, upscale: upscaleBody, relight: relightBody, edit: editBody, review: reviewBody, brief: briefBody, cast: castBody, chargen: charGenBody, prodgen: charGenBody, pose: poseBody, sheet: sheetBody, save: saveBody }[n.type](n)}</div>
     ${n.type === 'transition'
       ? '<span class="cv-port in" data-port="a" title="Entrada A: vídeo ou imagem de onde a transição sai"><i>A</i></span><span class="cv-port in port-b" data-port="b" title="Entrada B: vídeo ou imagem onde a transição chega"><i>B</i></span>'
       : n.type === 'relight'
@@ -838,6 +845,7 @@ function nodeEl(n) {
   if (n.type === 'frame') bindFrameNode(el, n);
   if (n.type === 'upscale') bindUpscale(el, n);
   if (n.type === 'relight') bindRelight(el, n);
+  if (n.type === 'edit') bindEdit(el, n);
   if (n.type === 'review') bindReview(el, n);
   if (n.type === 'brief') bindBrief(el, n);
   if (n.type === 'cast') bindCast(el, n);
@@ -950,6 +958,85 @@ async function runRelight(n) {
   renderNode(n);
   save();
   toast(job.mode === 'local' ? `${n.name}: ajuste simples (sem modelo com referências)` : `${n.name}: aplicando com IA`);
+  return watchJob(n);
+}
+
+// ---------------- Expandir / editar região ----------------
+
+const EDIT_ASPECTS = ['1:1', '16:9', '9:16', '4:5', '21:9'];
+const EDIT_ANCHORS = [['center', 'Centro'], ['top', 'Topo'], ['bottom', 'Base'], ['left', 'Esquerda'], ['right', 'Direita']];
+
+function newEdit(pos) {
+  return { id: uid('ed'), type: 'edit', name: t('Expandir / editar'), op: 'outpaint', aspect: '16:9', anchor: 'center',
+    prompt: '', mask: null, model: 'auto', status: 'idle', output: null, takes: [], jobId: null, editMode: null, ...pos };
+}
+
+const editModeNote = (n) => (n.editMode === 'local'
+  ? 'Sem modelo com referências: preenchimento simples (Pillow). A IA não foi usada.'
+  : n.editMode === 'ai' ? 'Edição com IA: o original é mantido fora da área que muda.'
+    : 'Com um modelo de imagem que aceite referências a IA faz o trabalho; sem ele, o preenchimento é simples (Pillow).');
+
+function editBody(n) {
+  const src = upscaleSource(n);
+  const outpaint = n.op !== 'inpaint';
+  const done = !!n.output;
+  const aspects = EDIT_ASPECTS.map((a) => opt(a, n.aspect, a)).join('');
+  const anchors = EDIT_ANCHORS.map(([k, v]) => opt(k, n.anchor, v)).join('');
+  const body = outpaint
+    ? `${field('Novo aspecto', `<select data-k="aspect">${aspects}</select>`)}
+      ${field('Posição da imagem no quadro', `<select data-k="anchor">${anchors}</select>`)}`
+    : `<button class="btn small ghost" data-act="mask">${ic('sparkles')} ${n.mask ? 'Repintar região' : 'Pintar região'}</button>
+      <div class="cv-meta"><span>${n.mask ? 'Região pintada: a IA troca só ela.' : 'Pinte a região que deve mudar.'}</span></div>`;
+  return `
+    ${previewBlock(n, { placeholder: { icon: 'sparkles', text: src ? '' : 'Ligue uma imagem na entrada' }, ghost: src })}
+    ${src ? '' : `<div class="cv-meta"><span class="err">${ic('alert')} Ligue uma imagem na entrada</span></div>`}
+    ${field('Operação', `<select data-k="op">${opt('outpaint', n.op, 'Expandir (outpaint)')}${opt('inpaint', n.op, 'Editar região (inpaint)')}</select>`)}
+    ${body}
+    ${field('O que colocar (opcional)', `<textarea data-k="prompt" rows="2" maxlength="1000" placeholder="Ex.: céu noturno com estrelas">${esc(n.prompt)}</textarea>`)}
+    <div class="cv-meta"><span>${esc(editModeNote(n))}</span></div>
+    ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
+    <div class="cv-foot">
+      <button class="btn primary" data-act="edit" ${n.status === 'running' || !src || (!outpaint && !n.mask) ? 'disabled' : ''}>${ic('sparkles')} ${done ? 'Aplicar de novo' : (outpaint ? 'Expandir' : 'Editar região')}</button>
+    </div>`;
+}
+
+function bindEdit(el, n) {
+  el.querySelectorAll('[data-k]').forEach((inp) => {
+    const ev = inp.tagName === 'TEXTAREA' ? 'input' : 'change';
+    inp.addEventListener(ev, () => {
+      n[inp.dataset.k] = inp.value;
+      save();
+      if (inp.dataset.k === 'op') renderNode(n);
+    });
+  });
+  el.querySelector('[data-act=mask]')?.addEventListener('click', () => openMask(n));
+  el.querySelector('[data-act=edit]')?.addEventListener('click', () => runEdit(n).catch((err) => toast(err.message)));
+}
+
+// Expandir ou editar região: entra na fila de jobs. Sem modelo com referências, o preenchimento simples avisa.
+async function runEdit(n) {
+  const src = upscaleSource(n);
+  if (!src) return toast('Ligue uma imagem na entrada');
+  if (n.status === 'running') return;
+  let job;
+  try {
+    if (n.op === 'inpaint') {
+      if (!n.mask) return toast('Pinte a região que será editada');
+      job = await api('/api/image/inpaint', { node_id: n.id, name: n.name, source_url: src, mask: n.mask, prompt: n.prompt || '', model: n.model || 'auto' });
+    } else {
+      job = await api('/api/image/outpaint', { node_id: n.id, name: n.name, source_url: src, aspect: n.aspect, anchor: n.anchor,
+        prompt: n.prompt || '', model: n.model || 'auto' });
+    }
+  } catch (err) {
+    Object.assign(n, { status: 'error', error: err.message });
+    renderNode(n);
+    throw err;
+  }
+  n.editMode = job.mode;
+  Object.assign(n, { jobId: job.id, status: 'running', progress: 0, error: null, stage: job.mode === 'local' ? 'preenchimento simples' : 'enviado', cost: null });
+  renderNode(n);
+  save();
+  toast(job.mode === 'local' ? `${n.name}: preenchimento simples (sem modelo com referências)` : `${n.name}: aplicando com IA`);
   return watchJob(n);
 }
 

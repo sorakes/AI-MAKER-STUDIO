@@ -95,6 +95,26 @@
   </section>
 </main>
 
+<dialog id="maskDialog" class="dz-dialog">
+  <div class="dz-top">
+    <div class="dz-title"><i data-ic="sparkles"></i><div><small>Editar região · pinte o que muda</small><b id="maskTitle">Editar região</b></div></div>
+    <div class="dz-tools">
+      <button class="btn small ghost dz-tool" id="maskBrush" title="Pincel (B)" aria-label="Pincel" aria-pressed="true"><i data-ic="route"></i><span>Pincel</span></button>
+      <button class="btn small ghost dz-tool" id="maskEraser" title="Borracha (E)" aria-label="Borracha" aria-pressed="false"><i data-ic="x"></i><span>Borracha</span></button>
+      <label class="mask-size"><span>Tamanho</span><input type="range" id="maskSize" min="4" max="120" value="28" aria-label="Tamanho do pincel"></label>
+      <button class="btn small ghost" id="maskUndo" title="Desfazer (Ctrl+Z)" aria-label="Desfazer"><i data-ic="undo"></i> Desfazer</button>
+      <button class="btn small ghost" id="maskClear" title="Apagar a máscara" aria-label="Apagar máscara"><i data-ic="trash"></i> Limpar</button>
+      <span class="dz-sep"></span>
+      <button class="btn small ghost" id="maskCancel">Cancelar</button>
+      <button class="btn small primary" id="maskSave"><i data-ic="check"></i> Usar esta região</button>
+    </div>
+  </div>
+  <div class="dz-body">
+    <div class="dz-stage" id="maskStage">
+      <div class="dz-canvaswrap"><img id="maskImg" alt="Imagem a editar"><canvas id="maskCanvas" aria-label="Área pintada"></canvas></div>
+    </div>
+  </div>
+</dialog>
 <dialog id="dzDialog" class="dz-dialog">
   <div class="dz-top">
     <div class="dz-title"><i data-ic="route"></i><div><small>Câmera e movimento · desenhe no frame</small><b id="dzTitle">Plano</b></div></div>
@@ -139,6 +159,7 @@
 <script src="/js/effects.js"></script>
 <script src="/js/canvas.js"></script>
 <script src="/js/direction.js"></script>
+<script src="/js/mask.js"></script>
 <script src="/js/creation.js"></script>
 <script src="/js/sprites.js"></script>
 <script src="/js/transitions.js"></script>
