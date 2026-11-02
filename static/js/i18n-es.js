@@ -1229,3 +1229,4 @@ I18N.fromEnglish('es', {"The \"Extend / loop\" node was retired and removed from
 I18N.fromEnglish('es', {"BETA": "BETA", "Beta feature": "Función en beta", "Beta feature: it may change or fail": "Función en beta: puede cambiar o fallar", "audio (beta)": "audio (beta)"});
 I18N.fromEnglish('es', {"Generate audio": "Generar audio"});
 I18N.fromEnglish('es', {"Mask: {} px · change inside {} · outside {}": "Máscara: {} px · cambio dentro {} · fuera {}", "The AI did not change the marked region.": "La IA no cambió la región marcada.", "Try again": "Intentar de nuevo"});
+I18N.fromEnglish('es', {"Region painted": "Región pintada", "Region painted · Drawing": "Región pintada · Dibujo", "Drawing": "Dibujo", "Clear region": "Limpiar región"});

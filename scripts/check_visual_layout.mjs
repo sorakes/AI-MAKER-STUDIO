@@ -132,6 +132,15 @@ for (const lang of langs) {
     const sb = document.querySelector('dialog.sb-dialog');
     if (sb) out.push({ kind: 'dialog', key: 'storyboard', lang: '${lang}', bad: __measure(sb, sb) });
     sb?.close();
+    // máscara (Pintar região) e direção (Desenho): abre o diálogo vazio e mede o painel
+    for (const id of ['maskDialog', 'dzDialog']) {
+      const d = document.getElementById(id);
+      if (!d) { out.push({ kind: 'error', key: id, lang: '${lang}', bad: ['diálogo ausente'] }); continue; }
+      d.showModal();
+      await new Promise((r) => setTimeout(r, 300));
+      out.push({ kind: 'dialog', key: id, lang: '${lang}', bad: __measure(d, d) });
+      d.close();
+    }
     return out;
   })()`);
   if (!Array.isArray(dialogs)) report.push({ kind: 'error', key: 'dialogs', lang, bad: ['falha: ' + JSON.stringify(dialogs).slice(0, 200)] }); else report.push(...dialogs);
