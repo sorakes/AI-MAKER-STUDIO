@@ -130,6 +130,10 @@ const wantsRefs = (n) => refsOf(n).length > 0 || castNodesOf(n).length > 0 || !!
 const diagramOf = (n) => { const f = startFrameOf(n); return f && n.direction?.diagram_url && n.direction.frame === f && n.sendDiagram !== false ? n.direction.diagram_url : null; };
 // escolha do modelo de vídeo sem depender do plano (evita laço planOf -> composeOn)
 const videoPick = (n) => chosenModel('video', n.model, startFrameOf(n) ? { i2v: true } : {}, wantsRefs(n));
+// Áudio junto com o vídeo: só para modelos que declaram suporte (caps.audio, do catálogo do OpenRouter).
+const videoSupportsAudio = (n) => !!videoPick(n)?.caps?.audio;
+const audioToggle = (n) => (n.gen === 'image' || !videoSupportsAudio(n) ? '' :
+  `<label class="vedit-check audio-toggle"><input type="checkbox" data-k="genAudio" ${n.genAudio ? 'checked' : ''}> <span>Gerar áudio</span>${betaTag()}</label>`);
 // Modelo que recebe referências leva o frame + referências direto: não precisa gerar o 1º frame com elas.
 const composeOn = (n) => n.gen !== 'image' && !!startFrameOf(n) && hasComposable(n) && n.compose !== 'off' && !videoPick(n)?.caps?.refs;
 // Imagens que vão para o vídeo: frame (vira imagem 1), desenho da câmera, referências
@@ -1543,6 +1547,7 @@ function shotBody(n) {
     <div class="cv-sec">
       ${field('Modelo de vídeo', modelSelect('model', 'video', n.model, frame ? { i2v: true } : n.startMode === 'text' ? { t2v: true } : {},
         frame || n.startMode === 'still' || !autoModel('video', { t2v: true }) ? { i2v: true } : { t2v: true }))}
+      ${audioToggle(n)}
       <div class="cv-plan">${plan.missing ? `<span class="err">${ic('alert')} ${esc(plan.missing)}</span>`
         : `<span>${plan.steps.map((s) => `<i class="cv-step ${s.kind}">${ic(s.kind === 'image' ? 'image' : 'video')}${esc(s.m.label)}</i>`).join(ic('step-forward', 'sep'))}</span><b class="cv-cost">~${fmtTok(planCost(plan, n.duration))}</b>`}</div>
       ${noRefsWarning(n)}
@@ -1640,7 +1645,8 @@ function bindShot(el, n) {
   el.querySelectorAll('[data-k]').forEach((inp) => {
     const ev = inp.tagName === 'TEXTAREA' ? 'input' : 'change';
     inp.addEventListener(ev, () => {
-      n[inp.dataset.k] = ['duration', 'variants'].includes(inp.dataset.k) ? +inp.value : inp.value;
+      if (inp.type === 'checkbox') n[inp.dataset.k] = inp.checked;
+      else n[inp.dataset.k] = ['duration', 'variants'].includes(inp.dataset.k) ? +inp.value : inp.value;
       if (['aspect', 'duration'].includes(inp.dataset.k)) n.autoKey = null;
       save();
       if (inp.tagName === 'SELECT') renderNode(n);
@@ -1890,6 +1896,7 @@ function shotPayload(n, ap) {
     ref_image_urls: refsOf(n),
     compose: composeOn(n),
     direction_image_url: n.gen !== 'image' && videoTakesRefs(n) ? diagramOf(n) : null,
+    generate_audio: n.gen !== 'image' && !!n.genAudio && videoSupportsAudio(n),  // modelo sem suporte: ignorado
   };
 }
 
