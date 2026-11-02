@@ -1075,3 +1075,34 @@ html.i18n-wait body { visibility: hidden; }
 /* Editar vídeo: trecho e opções */
 .vedit-trim { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .vedit-check { display: flex; gap: 8px; align-items: center; font-size: .72rem; }
+
+/* Nada vaza do node: conteúdo longo encolhe, quebra ou corta com reticências (nó tem largura fixa). */
+.cv-node { box-sizing: border-box; }
+.cv-node .cv-content, .cv-node .cv-content > * { min-width: 0; max-width: 100%; }
+.cv-node .cv-content { overflow-wrap: anywhere; word-break: break-word; }
+.cv-node select, .cv-node input, .cv-node textarea, .cv-node button { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.cv-node select { text-overflow: ellipsis; }
+.cv-node button { overflow-wrap: anywhere; white-space: normal; text-align: left; }
+.cv-node .cv-foot { flex-wrap: wrap; }
+.cv-node .cv-meta { flex-wrap: wrap; gap: 4px 8px; }
+.cv-node .cv-meta > span { min-width: 0; overflow-wrap: anywhere; }
+.cv-node .cv-plan { min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.cv-node .cv-plan > span { min-width: 0; flex: 1 1 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.cv-node .cv-plan > b { flex-shrink: 0; }
+.cv-node .cv-step, .cv-node .cv-chip { display: inline-flex; align-items: center; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-node .cv-chip-row { min-width: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.cv-node .cv-warn, .cv-node .cv-error span, .cv-node .cv-error { min-width: 0; overflow-wrap: anywhere; }
+.cv-node .cv-error { display: flex; }
+.cv-node .cv-error span { flex: 1 1 0; }
+.cv-node .beta-tag { flex-shrink: 0; }
+.cv-node .cv-flabel { min-width: 0; overflow-wrap: anywhere; }
+.cv-node .cv-row3, .cv-node .cv-row4 { min-width: 0; }
+.cv-node .cv-row3 > *, .cv-node .cv-row4 > * { min-width: 0; }
+.cv-node .cv-takes, .cv-node .cv-pv-tools { min-width: 0; flex-wrap: wrap; }
+.cv-node .cv-pv-tools > span, .cv-node .cv-takes span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-htext { min-width: 0; }
+.cv-htext > small, .cv-htext .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-htext > small { display: flex; align-items: center; }
+.cv-node .cv-preview { max-width: 100%; }
+.cv-node .aud-tabs { min-width: 0; flex-wrap: wrap; }
+.cv-node .aud-tab { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

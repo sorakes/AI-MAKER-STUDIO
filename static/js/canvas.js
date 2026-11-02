@@ -1549,7 +1549,7 @@ function shotBody(n) {
         frame || n.startMode === 'still' || !autoModel('video', { t2v: true }) ? { i2v: true } : { t2v: true }))}
       ${audioToggle(n)}
       <div class="cv-plan">${plan.missing ? `<span class="err">${ic('alert')} ${esc(plan.missing)}</span>`
-        : `<span>${plan.steps.map((s) => `<i class="cv-step ${s.kind}">${ic(s.kind === 'image' ? 'image' : 'video')}${esc(s.m.label)}</i>`).join(ic('step-forward', 'sep'))}</span><b class="cv-cost">~${fmtTok(planCost(plan, n.duration))}</b>`}</div>
+        : `<span>${plan.steps.map((s) => `<i class="cv-step ${s.kind}" title="${esc(s.m.label)}">${ic(s.kind === 'image' ? 'image' : 'video')}${esc(s.m.label)}</i>`).join(ic('step-forward', 'sep'))}</span><b class="cv-cost">~${fmtTok(planCost(plan, n.duration))}</b>`}</div>
       ${noRefsWarning(n)}
     </div>
     <div class="cv-row4">
@@ -1583,7 +1583,7 @@ function imageGenBody(n) {
     <div class="cv-sec">
       ${field('Modelo de imagem', modelSelect('model', 'image', n.model, refs ? {} : { t2i: true }))}
       <div class="cv-plan">${plan.missing ? `<span class="err">${ic('alert')} ${esc(plan.missing)}</span>`
-        : `<span><i class="cv-step image">${ic('image')}${esc(m.label)}</i>${refs && !m.caps.refs ? ' <span class="cv-warn">não usa referências</span>' : ''}</span><b class="cv-cost">${costLabel(m)}</b>`}</div>
+        : `<span><i class="cv-step image" title="${esc(m.label)}">${ic('image')}${esc(m.label)}</i>${refs && !m.caps.refs ? ' <span class="cv-warn">não usa referências</span>' : ''}</span><b class="cv-cost">${costLabel(m)}</b>`}</div>
       ${imageRefsWarning(m, refs)}
     </div>
     <div class="cv-row3">
