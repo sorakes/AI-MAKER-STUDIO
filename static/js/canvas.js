@@ -1090,6 +1090,25 @@ function inpaintReport(n) {
 }
 
 // Expandir ou editar região: entra na fila de jobs. Sem modelo com referências, o preenchimento simples avisa.
+// quantos pixels pintados (branco) a máscara guardada tem; 0 = vazia, o job não é enviado
+function maskPixels(url) {
+  return new Promise((resolve) => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = im.naturalWidth; c.height = im.naturalHeight;
+      const g = c.getContext('2d');
+      g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let px = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] > 127 && d[i + 3] > 127) px++;
+      resolve(px);
+    };
+    im.onerror = () => resolve(0);
+    im.src = url;
+  });
+}
+
 async function runEdit(n, { reinforce = false } = {}) {
   const src = upscaleSource(n);
   if (!src) return toast('Ligue uma imagem na entrada');
@@ -1098,6 +1117,10 @@ async function runEdit(n, { reinforce = false } = {}) {
   try {
     if (n.op === 'inpaint') {
       if (!n.mask) return toast('Pinte a região que será editada');
+      if (!(await maskPixels(n.mask))) {
+        n.mask = null; save(); renderNode(n);
+        return toast('A região pintada está vazia: pinte de novo antes de aplicar');
+      }
       job = await api('/api/image/inpaint', { node_id: n.id, name: n.name, source_url: src, mask: n.mask, prompt: n.prompt || '', model: n.model || 'auto', reinforce });
     } else {
       job = await api('/api/image/outpaint', { node_id: n.id, name: n.name, source_url: src, aspect: n.aspect, anchor: n.anchor,
