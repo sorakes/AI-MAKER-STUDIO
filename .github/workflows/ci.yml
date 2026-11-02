@@ -23,6 +23,9 @@ jobs:
             requirements.txt
             requirements-dev.txt
 
+      - name: ffmpeg (usado nos testes de montagem)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Dependências (produção + teste)
         run: pip install -r requirements-dev.txt
 
