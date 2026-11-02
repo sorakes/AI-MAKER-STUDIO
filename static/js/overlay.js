@@ -58,27 +58,37 @@ function drawPaintOverlay(el, n) {
   if (!n.mask && !layers.length) return;
   const cvs = document.createElement('canvas');
   cvs.className = 'paint-overlay';
-  cvs.setAttribute('data-st', 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2');
+  cvs.setAttribute('data-st', 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;z-index:2');
   pv.appendChild(cvs);
   const bw = pv.clientWidth, bh = pv.clientHeight;
-  if (!bw || !bh) return;
+  if (!bw || !bh) return;  // ainda sem layout: o ResizeObserver desenha quando ganhar tamanho
   cvs.width = bw; cvs.height = bh;
   const g = cvs.getContext('2d');
-  const media = pv.querySelector('img:not(.ghost), video');
-  const imgW = media?.naturalWidth || media?.videoWidth || 0, imgH = media?.naturalHeight || media?.videoHeight || 0;
-  if (imgW && imgH) {
+  // referência de enquadramento: a imagem do preview (ghost da entrada ou a saída). Sem ela carregada, a máscara
+  // tem a mesma proporção da imagem de origem e serve de referência.
+  const media = pv.querySelector('img, video');
+  const loaded = media && (media.naturalWidth || media.videoWidth);
+  const ref = loaded ? { w: media.naturalWidth || media.videoWidth, h: media.naturalHeight || media.videoHeight } : null;
+  if (media && !loaded) media.addEventListener('load', () => drawPaintOverlay(el, n), { once: true });
+  const drawAll = (imgW, imgH) => {
     const { s, dx, dy } = coverBox(bw, bh, imgW, imgH);
     const map = (x, y) => [dx + x * imgW * s, dy + y * imgH * s];
     if (n.mask) {
       const mi = new Image();
       mi.onload = () => {
         const tint = maskToOverlay(mi);
-        g.drawImage(tint, dx, dy, mi.naturalWidth * s, mi.naturalHeight * s);
+        g.drawImage(tint, dx, dy, imgW * s, imgH * s);  // a máscara (512 px) é esticada ao quadro da imagem
+        drawStrokes(g, layers, map);
       };
       mi.src = n.mask;
-    }
-    drawStrokes(g, layers, map);
-  }
+    } else drawStrokes(g, layers, map);
+  };
+  if (ref) drawAll(ref.w, ref.h);
+  else if (n.mask) {
+    const mi = new Image();
+    mi.onload = () => drawAll(mi.naturalWidth, mi.naturalHeight);  // sem imagem: a própria máscara define o quadro
+    mi.src = n.mask;
+  } else drawAll(bw, bh);
   const badge = document.createElement('span');
   badge.className = 'paint-badge';
   badge.setAttribute('data-st', 'position:absolute;left:8px;top:8px;z-index:3;padding:3px 8px;border-radius:999px;background:rgba(217,70,239,.85);color:#fff;font:600 .66rem var(--font-sans);pointer-events:none');
@@ -93,5 +103,10 @@ function drawPaintOverlay(el, n) {
     clear.textContent = 'Limpar região';
     pv.appendChild(clear);
     clear.addEventListener('click', () => { n.mask = null; save(); renderNode(n); toast('Região limpa'); });
+  }
+  // redesenha quando o preview muda de tamanho (zoom, redimensionar o node)
+  if (!pv._paintRO && window.ResizeObserver) {
+    pv._paintRO = new ResizeObserver(() => { if (pv.isConnected) drawPaintOverlay(el, n); });
+    pv._paintRO.observe(pv);
   }
 }
