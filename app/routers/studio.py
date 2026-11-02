@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, camera, db, groups, lipsync, providers, sprites, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, camera, db, extend, groups, lipsync, providers, sprites, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -317,6 +317,44 @@ async def lipsync_video(req: lipsync.LipSyncRequest, user: dict = Depends(curren
         node_id=req.node_id, name=req.name, gen="lipsync", model=req.model, prompt=prompt, keyframe_prompt=prompt,
         aspect=req.aspect, duration=seconds, ref_image_urls=[req.image_url],
         local_op={"kind": "lipsync", "audio_url": req.audio_url, "aspect": req.aspect, "seconds": seconds}))
+
+
+async def _video_source(url: str, user: dict) -> dict:
+    """Clipe do próprio usuário (403 se for de outro, 400 se não for vídeo). Devolve duração e caminho."""
+    path = storage.resolve(url, user)
+    try:
+        info = await asyncio.to_thread(media.probe, path)
+    except Exception as e:  # noqa: BLE001 - arquivo que o ffprobe não lê
+        raise HTTPException(400, "Arquivo de entrada não é um vídeo") from e
+    if not info.get("duration") or not info.get("width"):
+        raise HTTPException(400, "Arquivo de entrada não é um vídeo")
+    return {"path": path, **info}
+
+
+@router.post("/video/extend")
+async def extend_video(req: extend.ExtendRequest, user: dict = Depends(current_user)):
+    """Estender: último frame do clipe -> continuação com IA (modelo com quadro inicial) -> une com o original."""
+    src = await _video_source(req.source_url, user)
+    if not extend.pick(user, req.model):
+        raise HTTPException(400, extend.NO_START_MSG)
+    last = await asyncio.to_thread(media.extract_frame, src["path"], True)
+    prompt = extend.extend_prompt(req)
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="video", model=req.model, prompt=prompt, keyframe_prompt=prompt,
+        start_image_url=storage.to_url(last), duration=float(req.seconds), aspect=await asyncio.to_thread(extend.aspect_of, src["path"]),
+        extend_source_url=req.source_url, extend_transition=req.transition, ref_image_urls=[]))
+
+
+@router.post("/video/loop")
+async def loop_video(req: extend.LoopRequest, user: dict = Depends(current_user)):
+    """Loop perfeito sem IA: ida e volta, ou crossfade final->início (ffmpeg)."""
+    src = await _video_source(req.source_url, user)
+    if req.mode == "crossfade" and req.seconds >= src["duration"] / 2:
+        raise HTTPException(400, "O crossfade precisa ser menor que a metade do clipe")
+    return await _image_job(user, jobs.RenderRequest(
+        node_id=req.node_id, name=req.name, gen="loop", prompt="loop", keyframe_prompt="loop",
+        duration=float(src["duration"]), ref_image_urls=[req.source_url],
+        local_op={"kind": "loop", "mode": req.mode, "seconds": req.seconds}))
 
 
 @router.post("/direction/interpret")
