@@ -1040,6 +1040,9 @@ const editModeNote = (n) => (n.editMode === 'local'
   : n.editMode === 'ai' ? 'Edição com IA: o original é mantido fora da área que muda.'
     : 'Com um modelo de imagem que aceite referências a IA faz o trabalho; sem ele, o preenchimento é simples (Pillow).');
 
+// dica discreta do modo inpaint: o que a edição por chat faz bem e como tratar objetos finos/sobrepostos
+const INPAINT_TIP = 'Dica: funciona melhor com objetos simples e isolados. Para remover algo fino ou sobreposto, pinte também um pedaço do fundo ao redor e descreva o que deve aparecer no lugar (ex.: "céu desfocado").';
+
 function editBody(n) {
   const src = upscaleSource(n);
   const outpaint = n.op !== 'inpaint';
@@ -1057,6 +1060,7 @@ function editBody(n) {
     ${field('Operação', `<select data-k="op">${opt('outpaint', n.op, 'Expandir (outpaint)')}${opt('inpaint', n.op, 'Editar região (inpaint)')}</select>`)}
     ${body}
     ${field('O que colocar (opcional)', `<textarea data-k="prompt" rows="2" maxlength="1000" placeholder="Ex.: céu noturno com estrelas">${esc(n.prompt)}</textarea>`)}
+    ${outpaint ? '' : `<div class="cv-meta"><span>${esc(INPAINT_TIP)}</span></div>`}
     <div class="cv-meta"><span>${esc(editModeNote(n))}</span></div>
     ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
     ${inpaintReport(n)}
@@ -1084,7 +1088,10 @@ function inpaintReport(n) {
   const r = n.result?.inpaint;
   if (!r || n.status === 'running') return '';
   const mudou = `Máscara: ${r.mask_pixels.toLocaleString('pt-BR')} px · mudança dentro ${r.inside_mean} · fora ${r.outside_mean}`;
-  return `<div class="cv-meta"><span>${esc(mudou)}</span></div>` + (r.unchanged
+  // sem texto no campo, mostra o que a visão identificou (o que o app entendeu do contorno)
+  const alvo = r.ident?.target && !(n.prompt || '').trim()
+    ? `<div class="cv-meta"><span>Alvo identificado: ${esc(r.ident.target)}</span></div>` : '';
+  return alvo + `<div class="cv-meta"><span>${esc(mudou)}</span></div>` + (r.unchanged
     ? `<div class="cv-warn">${ic('alert')} <span>A IA não alterou a região marcada.</span></div>
        <div class="cv-foot"><button class="btn ghost" data-act="edit-retry">${ic('refresh')} Tentar de novo</button></div>` : '');
 }

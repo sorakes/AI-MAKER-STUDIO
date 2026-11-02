@@ -124,6 +124,18 @@ app/
 static/           login.html, studio.html, admin.html, css, js (i18n*.js = translations)
 ```
 
+## Limitações conhecidas
+
+**Edição de região (inpaint) com modelos de edição por chat.** A região pintada é trocada por um modelo de edição por chat. Funciona bem com objetos simples e isolados (ex.: a arma da abelha saiu). Falha com objetos finos e sobrepostos (asas, cabelo, grades): o modelo reinterpreta a área em vez de apagá-la. Testado em novembro de 2026 com a mesma imagem (abelha com asas) e a mesma máscara:
+
+| Modelo | Resultado | Custo por tentativa |
+|---|---|---|
+| Google Nano Banana 2 Lite (padrão) | asas redesenhadas, não removidas (3 tentativas, com e sem visão) | ~US$ 0,034 |
+| Google Nano Banana Pro | asas ainda visíveis | ~US$ 0,139 |
+| OpenAI GPT-5 Image | não devolve imagem nessa rota | sem cobrança |
+
+No node, para remover algo fino ou sobreposto, pinte também um pedaço do fundo ao redor e descreva o que deve aparecer no lugar.
+
 ## Security
 
 - Passwords hashed with scrypt. The session is an HttpOnly, SameSite=Lax cookie. For HTTPS, set `COOKIE_SECURE=1`.
