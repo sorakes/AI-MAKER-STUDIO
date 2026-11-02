@@ -1,7 +1,7 @@
 // Direção desenhada sobre o 1º frame.
 //
 //   ROXO   = câmera: a linha é a rota da câmera sobre a imagem (ponto = começo, seta = fim).
-//   CORES  = elementos: circule o objeto e/ou puxe uma linha para onde ele vai.
+//   CORES  = elementos: circule o objeto e/ou puxe uma linha (ponto cheio = onde começa, anel vazio = onde termina).
 // Cada cor tem um cartão ("AMARELO") onde se escreve o que deve acontecer. A IA de visão recebe o
 // frame com o desenho + os cartões e transforma em instrução de movimento para o modelo de vídeo.
 // Sem frame conectado a câmera fica bloqueada (balão explica como liberar).
@@ -20,9 +20,10 @@ const DZ_COLORS = {
 const DZ_PLACEHOLDER = {
   camera: 'O que a câmera faz? Ex.: começa aberta, avança devagar até a garrafa e sobe até o logo.',
   element: 'O que este elemento faz? Ex.: a bola vai levemente para a direita.',
+  sketch: 'O que muda nesta região? Ex.: a camiseta passa a ser azul-marinho.',
 };
 
-const dz = { node: null, frame: null, img: null, layers: [], active: 'camera', tool: 'draw', stroke: null, history: [], result: null, busy: false, help: true };
+const dz = { node: null, frame: null, img: null, layers: [], active: 'camera', tool: 'draw', stroke: null, history: [], result: null, busy: false, help: true, mode: 'direction' };
 
 // ---------------- Card no nó + balão ----------------
 
@@ -64,7 +65,7 @@ function bindDirectionCard(el, n) {
     <p>A câmera e os movimentos são desenhados <b>em cima do 1º frame</b> do vídeo. Sem frame, não há onde desenhar.</p>
     <ol>
       <li>Ligue uma <b>imagem</b> ou <b>vídeo</b> na entrada deste nó (bolinha da esquerda). Pode ser um upload ou a saída de um <b>Gerar imagem</b>.</li>
-      <li>Clique aqui de novo: em <b data-st="color:${DZ_COLORS.camera.hex}">roxo</b> você desenha a rota da câmera; com outras cores, circula objetos e mostra para onde eles vão.</li>
+      <li>Clique aqui de novo: em <b data-st="color:${DZ_COLORS.camera.hex}">roxo</b> você desenha a rota da câmera; com outras cores, circula objetos e puxa linhas: o ponto cheio é onde o objeto começa e o anel vazio, onde termina.</li>
       <li>Escreva em cada cartão o que deve acontecer. A IA olha o frame e o desenho e move a câmera do vídeo a partir dele.</li>
     </ol>
     <p class="muted">Sem frame, o vídeo ainda pode ser gerado só pelo texto: a IA escolhe a câmera.</p>`));
@@ -100,7 +101,7 @@ function drawDirectionThumb(canvas, n) {
   img.onload = () => {
     const s = Math.max(W / img.width, H / img.height);
     g.drawImage(img, (W - img.width * s) / 2, (H - img.height * s) / 2, img.width * s, img.height * s);
-    (n.direction?.layers || []).forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, 1.2)));
+    (n.direction?.layers || []).forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, 1.2, l.color === 'camera')));
   };
   img.src = frame;
 }
@@ -130,6 +131,8 @@ function initDirection() {
 function openDirection(n) {
   const frame = startFrameOf(n);
   if (!frame) return;
+  dz.mode = 'direction';
+  sketchChrome(false);
   dz.node = n;
   dz.frame = frame;
   const saved = n.direction;
@@ -150,6 +153,42 @@ function openDirection(n) {
   renderDzCards();
   renderDzResult();
   setTool('draw');
+}
+
+// Modo "Desenhar para regerar" (imagem gerada): mesmo editor, sem câmera nem interpretação.
+function openSketch(n) {
+  const out = n.output;
+  if (!out?.url || out.kind === 'video') return toast('Gere a imagem primeiro');
+  dz.mode = 'sketch';
+  dz.node = n;
+  dz.frame = out.url;
+  const saved = n.sketch?.layers;
+  dz.layers = saved ? JSON.parse(JSON.stringify(saved)) : [{ color: 'red', label: DZ_COLORS.red.label, prompt: '', shapes: [] }];
+  dz.active = dz.layers[0].color;
+  dz.result = null;
+  dz.tool = 'draw';
+  dz.history = [];
+  sketchChrome(true);
+  $('#dzTitle').textContent = n.name;
+  dz.img = new Image();
+  dz.img.onload = () => { dzSize(); dzRender(); };
+  dz.img.src = out.url;
+  $('#dzImg').src = out.url;
+  $('#dzDialog').showModal();
+  renderDzCards();
+  renderDzResult();
+  setTool('draw');
+}
+
+// Esconde o que é só de câmera no modo de regerar e troca os rótulos do editor.
+function sketchChrome(on) {
+  $('#dzInterpret').hidden = on;
+  $('#dzInterpret').closest('.dz-res-box').hidden = on;
+  $('#dzHelpBtn').hidden = on;
+  $('#dzHelp').hidden = on || !dz.help;
+  $('#dzSave').lastChild.textContent = on ? ' Regerar imagem' : ' Salvar';
+  const small = document.querySelector('.dz-title small');
+  if (small) small.textContent = on ? 'Desenhar para regerar · marque o que muda' : 'Câmera e movimento · desenhe no frame';
 }
 
 function dzSize() {
@@ -222,7 +261,8 @@ function finishShape(pts) {
   return { type: closed && pathLen(simple) > 0.08 ? 'loop' : 'path', points: simple.map(([x, y]) => [+x.toFixed(4), +y.toFixed(4)]) };
 }
 
-function paintShape(g, sh, hex, W, H, scale = 1) {
+// camera: a linha de câmera leva seta no fim; linhas de elementos levam anel vazio no fim. Loops não mudam.
+function paintShape(g, sh, hex, W, H, scale = 1, camera = false) {
   const pts = sh.points;
   if (pts.length < 2) return;
   const lw = 4 * scale;
@@ -236,15 +276,24 @@ function paintShape(g, sh, hex, W, H, scale = 1) {
   if (sh.type === 'loop') { g.globalAlpha = 0.16; g.fillStyle = hex; trace(); g.fill(); g.globalAlpha = 1; }
   else {
     const [x0, y0] = pts[0];
-    g.fillStyle = hex; g.beginPath(); g.arc(x0 * W, y0 * H, lw * 1.4, 0, Math.PI * 2); g.fill();
-    const a = pts.at(-1), b = pts[Math.max(0, pts.length - 5)];
-    const ang = Math.atan2((a[1] - b[1]) * H, (a[0] - b[0]) * W);
-    const L = 14 * scale;
-    g.beginPath();
-    g.moveTo(a[0] * W, a[1] * H);
-    g.lineTo(a[0] * W - L * Math.cos(ang - 0.45), a[1] * H - L * Math.sin(ang - 0.45));
-    g.lineTo(a[0] * W - L * Math.cos(ang + 0.45), a[1] * H - L * Math.sin(ang + 0.45));
-    g.closePath(); g.fill();
+    g.fillStyle = hex; g.beginPath(); g.arc(x0 * W, y0 * H, lw * 1.4, 0, Math.PI * 2); g.fill();  // início: ponto cheio
+    const a = pts.at(-1);
+    if (camera) {  // rota da câmera: seta no fim
+      const b = pts[Math.max(0, pts.length - 5)];
+      const ang = Math.atan2((a[1] - b[1]) * H, (a[0] - b[0]) * W);
+      const L = 14 * scale;
+      g.beginPath();
+      g.moveTo(a[0] * W, a[1] * H);
+      g.lineTo(a[0] * W - L * Math.cos(ang - 0.45), a[1] * H - L * Math.sin(ang - 0.45));
+      g.lineTo(a[0] * W - L * Math.cos(ang + 0.45), a[1] * H - L * Math.sin(ang + 0.45));
+      g.closePath(); g.fill();
+    } else {  // elemento: anel vazado no fim (sombra por baixo, como os traços)
+      const r = lw * 1.9;
+      g.beginPath(); g.arc(a[0] * W, a[1] * H, r, 0, Math.PI * 2);
+      g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = lw + 3 * scale; g.stroke();
+      g.beginPath(); g.arc(a[0] * W, a[1] * H, r, 0, Math.PI * 2);
+      g.strokeStyle = hex; g.lineWidth = lw; g.stroke();
+    }
   }
   g.restore();
 }
@@ -269,8 +318,8 @@ function dzRender() {
   const g = cvs.getContext('2d');
   const W = cvs.width, H = cvs.height, d = devicePixelRatio;
   g.clearRect(0, 0, W, H);
-  dz.layers.forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, d * (l.color === dz.active ? 1.1 : 0.9))));
-  if (dz.stroke) paintShape(g, { type: 'path', points: dz.stroke }, DZ_COLORS[dz.active].hex, W, H, d * 1.1);
+  dz.layers.forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, d * (l.color === dz.active ? 1.1 : 0.9), l.color === 'camera')));
+  if (dz.stroke) paintShape(g, { type: 'path', points: dz.stroke }, DZ_COLORS[dz.active].hex, W, H, d * 1.1, dz.active === 'camera');
   dz.layers.forEach((l) => paintTag(g, l, W, H, d));
 }
 
@@ -337,9 +386,9 @@ function renderDzCards() {
         ${l.shapes.length ? `<button class="cv-hbtn" data-clear="${l.color}" title="Apagar traços desta cor" aria-label="Apagar traços desta cor">${ic('undo')}</button>` : ''}
         ${cam ? '' : `<button class="cv-hbtn" data-remove="${l.color}" title="Remover elemento" aria-label="Remover elemento">${ic('trash')}</button>`}
       </div>
-      <textarea rows="${cam ? 3 : 2}" data-prompt="${l.color}" placeholder="${esc(cam ? DZ_PLACEHOLDER.camera : DZ_PLACEHOLDER.element)}">${esc(l.prompt)}</textarea>
+      <textarea rows="${cam ? 3 : 2}" data-prompt="${l.color}" placeholder="${esc(cam ? DZ_PLACEHOLDER.camera : dz.mode === 'sketch' ? DZ_PLACEHOLDER.sketch : DZ_PLACEHOLDER.element)}">${esc(l.prompt)}</textarea>
       ${cam && !l.shapes.length ? '<small class="dz-tip">Desenhe em roxo por onde a câmera vai: o ponto é o começo e a seta, o fim.</small>' : ''}
-      ${!cam && !l.shapes.length ? '<small class="dz-tip">Circule o objeto e puxe uma linha mostrando para onde ele vai.</small>' : ''}
+      ${!cam && !l.shapes.length ? '<small class="dz-tip">Circule o objeto ou puxe uma linha: o ponto cheio marca o começo e o anel vazio, o fim.</small>' : ''}
     </div>`;
   }).join('');
   document.querySelectorAll('.dz-card').forEach((card) => card.addEventListener('mousedown', (e) => {
@@ -375,7 +424,7 @@ function annotatedImage() {
   const g = c.getContext('2d');
   g.drawImage(img, 0, 0, W, H);
   const k = W / 900;
-  dz.layers.forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, k * 1.3)));
+  dz.layers.forEach((l) => l.shapes.forEach((sh) => paintShape(g, sh, DZ_COLORS[l.color].hex, W, H, k * 1.3, l.color === 'camera')));
   dz.layers.forEach((l) => paintTag(g, l, W, H, k * 1.4));
   return c.toDataURL('image/jpeg', 0.86);
 }
@@ -413,7 +462,34 @@ function renderDzResult() {
     <small class="dz-src">via ${esc(r.source || '')}</small>`;
 }
 
+// Regerar: a visão lê a imagem com as marcações; o gerador recebe a imagem original (sem traços).
+async function saveSketch() {
+  const n = dz.node;
+  const layers = activeLayers();
+  if (!layers.length) return toast('Circule uma região ou escreva o que deve mudar');
+  const btn = $('#dzSave');
+  btn.disabled = true;
+  try {
+    const job = await api('/api/image/regenerate-from-sketch', {
+      node_id: n.id, name: n.name, source_url: n.output.url, annotated: annotatedImage(),
+      layers: layers.map((l) => ({ color: l.color, label: l.label, prompt: l.prompt, shapes: l.shapes })),
+      intent: n.intent || '', model: n.model || 'auto', aspect: n.aspect || '16:9',
+      quality: n.quality === 'final' ? 'final' : 'draft', ref_image_urls: refsOf(n),
+    });
+    n.sketch = { layers: JSON.parse(JSON.stringify(dz.layers)) };
+    Object.assign(n, { jobId: job.id, status: 'running', progress: 0, error: null, stage: 'enviado', cost: null });
+    $('#dzDialog').close();
+    renderNode(n);
+    save();
+    toast(`${n.name}: regerando a partir do desenho`);
+    watchJob(n);  // a versão anterior continua nas versões do nó (takes)
+  } catch (err) {
+    toast(`Não deu para regerar: ${err.message}`);
+  } finally { btn.disabled = false; }
+}
+
 async function saveDirection() {
+  if (dz.mode === 'sketch') return saveSketch();
   const n = dz.node;
   const btn = $('#dzSave');
   btn.disabled = true;

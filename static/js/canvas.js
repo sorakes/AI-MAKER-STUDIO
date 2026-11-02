@@ -973,6 +973,7 @@ function imageGenBody(n) {
     ${n.status === 'error' ? `<div class="cv-error">${ic('x-circle')}<span>${esc(n.error || 'erro')}</span></div>` : ''}
     <div class="cv-foot">
       <button class="btn ghost" data-act="prompt" title="Escrever/reescrever o prompt técnico">${ic('sparkles')} Prompt</button>
+      ${done ? `<button class="btn ghost" data-act="sketch" title="Marque regiões e escreva o que muda: a imagem é regerada sem os traços">${ic('route')} Desenhar para regerar</button>` : ''}
       <button class="btn primary" data-act="run" ${n.status === 'running' || plan.missing ? 'disabled' : ''}>${ic(done ? 'refresh' : 'play')} ${done ? 'Regerar' : 'Gerar imagem'}</button>
     </div>`;
 }
@@ -1033,6 +1034,7 @@ function bindShot(el, n) {
   el.querySelector('.cv-adv')?.addEventListener('toggle', (e) => { n.advOpen = e.target.open; });
   if (n.advOpen) el.querySelector('.cv-adv')?.setAttribute('open', '');
   el.querySelector('[data-act=prompt]').onclick = async () => { await ensureAuto(n, true); };
+  el.querySelector('[data-act=sketch]')?.addEventListener('click', () => openSketch(n));
   el.querySelector('[data-act=run]').onclick = () => runShot(n).catch((err) => toast(err.message));
   bindRefs(el, n);
   bindStartPicker(el, n);

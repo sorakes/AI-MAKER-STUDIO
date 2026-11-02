@@ -59,8 +59,13 @@ def _geometry(layer: Layer) -> str:
             direction = " and ".join(d for d in [
                 ("right" if dx > 0 else "left") if abs(dx) > .05 else "",
                 ("down" if dy > 0 else "up") if abs(dy) > .05 else ""] if d) or "in place"
-            parts.append(f"line from the {_where(*a)} to the {_where(*b)} (moving {direction}, "
-                         f"{(dx * dx + dy * dy) ** .5 * 100:.0f}% of the frame)")
+            span = f"{(dx * dx + dy * dy) ** .5 * 100:.0f}% of the frame"
+            if layer.color == "camera":  # rota da câmera: ponto = começo, seta = fim
+                parts.append(f"camera route from the {_where(*a)} (dot = start) to the {_where(*b)} (arrow = end) "
+                             f"(moving {direction}, {span})")
+            else:  # elemento: ponto cheio = onde começa, anel vazio = onde termina
+                parts.append(f"element path from the {_where(*a)} (solid dot = start) to the {_where(*b)} "
+                             f"(hollow ring = end) (moving {direction}, {span})")
     return "; ".join(parts)
 
 
@@ -78,7 +83,8 @@ SYSTEM = (
     "You are a director of photography. You receive the FIRST FRAME of a shot with the director's drawing on top "
     "of it, plus a note per color. PURPLE is the CAMERA: its line is the route of the camera over the image "
     "(dot = start, arrow = end; going toward something means moving the camera toward it). Every OTHER color is "
-    "an ELEMENT: a closed loop circles the object that must move, a line/arrow shows where it goes. "
+    "an ELEMENT: a closed loop circles the object that must move; an open line starts at a solid DOT (where the "
+    "element starts) and ends at a hollow RING (where it goes). "
     "Look at the image to identify exactly WHAT is circled or touched by each color. The drawing itself is NOT part "
     "of the scene (never put lines, arrows or circles in the video). Reply JSON: "
     '{"camera_en":"precise English camera instruction tied to the image content (start framing, route, end '
