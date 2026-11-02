@@ -20,14 +20,20 @@ from .routers import admin, studio
 from .routers import auth as auth_routes
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+def _init_db():
+    """Startup síncrono (SQLite): roda numa thread para não travar o event loop."""
     db.init()
     groups.init()
     assets.init()
     auth.bootstrap_admin()
     registry.seed()
-    jobs.resume_all()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    jobs.bind_loop(asyncio.get_running_loop())
+    await asyncio.to_thread(_init_db)
+    await jobs.resume_all()
     asyncio.get_running_loop().run_in_executor(None, registry.backfill_costs)
     yield
 

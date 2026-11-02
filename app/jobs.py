@@ -118,10 +118,21 @@ def plan(user: dict, r: RenderRequest) -> list[dict]:
             _step("video", video_model({"i2v": True}, "imagem→vídeo"), "Vídeo a partir do 1º frame")]
 
 
+_SAVE_SQL = ("INSERT INTO jobs(id, user_id, created, status, data) VALUES(?,?,?,?,?) "
+             "ON CONFLICT(id) DO UPDATE SET status = excluded.status, data = excluded.data")
+
+
+def _save_args(job: dict) -> tuple:
+    return (job["id"], job["user_id"], job["created"], job["status"], json.dumps(job, ensure_ascii=False))
+
+
 def _save(job: dict):
-    db.run("INSERT INTO jobs(id, user_id, created, status, data) VALUES(?,?,?,?,?) "
-           "ON CONFLICT(id) DO UPDATE SET status = excluded.status, data = excluded.data",
-           (job["id"], job["user_id"], job["created"], job["status"], json.dumps(job, ensure_ascii=False)))
+    db.run(_SAVE_SQL, _save_args(job))
+
+
+async def asave(job: dict):
+    """Versão async (aiosqlite) de _save: usada pelas tarefas de render, que rodam no event loop."""
+    await db.arun(_SAVE_SQL, _save_args(job))
 
 
 def _visible(job: dict | None, user: dict) -> dict:
@@ -168,7 +179,8 @@ def _pending(uid: int) -> dict:
     return out
 
 
-def submit(user: dict, r: RenderRequest) -> dict:
+def prepare(user: dict, r: RenderRequest) -> dict:
+    """Checagens, planejamento e gravação do job. Síncrono: roda em thread (não toca o event loop)."""
     # Toda mídia de entrada precisa ser do próprio usuário.
     for u in [r.start_image_url, r.end_image_url, r.direction_image_url, *r.ref_image_urls]:
         if u:
@@ -198,12 +210,40 @@ def submit(user: dict, r: RenderRequest) -> dict:
            "est_cost": round(est, 4), "output": None, "media": None, "keyframe": None}
     JOBS[job["id"]] = job
     _save(job)
-    asyncio.get_running_loop().create_task(_run(job, user))
     return job
 
 
-def resume_all():
-    """Na subida do app: retoma jobs que estavam esperando o provedor."""
+_LOOP: asyncio.AbstractEventLoop | None = None  # loop do servidor (ligado no startup), para chamadas vindas de threads
+
+
+def bind_loop(loop: asyncio.AbstractEventLoop):
+    global _LOOP
+    _LOOP = loop
+
+
+def start(job: dict, user: dict, resume: bool = False):
+    """Agenda a tarefa do render no event loop do servidor. Funciona no loop e também a partir de threads."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = _LOOP
+        if loop is None:
+            raise RuntimeError("event loop do servidor não está ligado (bind_loop)")
+        loop.call_soon_threadsafe(loop.create_task, _run(job, user, resume=resume))
+        return
+    loop.create_task(_run(job, user, resume=resume))
+
+
+def submit(user: dict, r: RenderRequest) -> dict:
+    """prepare + start: usado por quem já está em thread (assets, sprites)."""
+    job = prepare(user, r)
+    start(job, user)
+    return job
+
+
+def _resume_plan() -> list[tuple[dict, dict]]:
+    """Síncrono (thread): marca como interrompidos os jobs que não dá mais para retomar; devolve os vivos."""
+    out = []
     for row in db.all_("SELECT data FROM jobs WHERE status IN ('queued', 'running')"):
         job = json.loads(row["data"])
         u = db.one("SELECT * FROM users WHERE id = ?", (job["user_id"],))
@@ -214,7 +254,14 @@ def resume_all():
             _save(job)
             continue
         JOBS[job["id"]] = job
-        asyncio.get_running_loop().create_task(_run(job, public_user(u), resume=True))
+        out.append((job, public_user(u)))
+    return out
+
+
+async def resume_all():
+    """Na subida do app: retoma jobs que estavam esperando o provedor (leitura no banco fora do loop)."""
+    for job, user in await asyncio.to_thread(_resume_plan):
+        start(job, user, resume=True)
 
 
 def _ext(url: str, kind: str) -> str:
@@ -248,7 +295,7 @@ async def _or_video(job: dict, st: dict, m: dict, i: int, n: int, prompt: str, s
             aspect=spec.aspect, duration=spec.duration, quality=spec.quality, seed=spec.seed)
         st["handle"] = await asyncio.to_thread(providers.or_video_submit, body, m.get("key_id"))
         st["started"] = time.time()
-        _save(job)
+        await asave(job)
     errors = 0
     deadline = st.get("started", time.time()) + VIDEO_TIMEOUT_S
     last_saved = 0.0
@@ -258,7 +305,7 @@ async def _or_video(job: dict, st: dict, m: dict, i: int, n: int, prompt: str, s
         await asyncio.sleep(5)
         if time.time() - last_saved > 15:  # progresso no banco: após reinício a tela mostra o último estado
             last_saved = time.time()
-            await asyncio.to_thread(_save, job)
+            await asave(job)
         try:
             s = await asyncio.to_thread(providers.or_video_status, st["handle"])
             errors = 0
@@ -305,7 +352,7 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 if st["kind"] == "image":
                     prev_image = st["output"]
                 continue
-            m = registry.get(st["model"])
+            m = await registry.aget(st["model"])
             if not m:
                 raise RuntimeError("modelo removido do painel durante o render")
             st["status"] = "running"
@@ -365,16 +412,16 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     job["detail"] = "baixando resultado"
                     st["output"] = await asyncio.to_thread(_store, job, i, url, st["kind"])
             except Exception as e:
-                usage.log(st["kind"], provider=m["provider"], model=m["model_id"], status="error",
+                await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], status="error",
                           detail={"job": job["id"], "error": str(e)[:400]})
                 raise
             st["cost"] = cost
             st["status"] = "done"
-            usage.log(st["kind"], provider=m["provider"], model=m["model_id"], cost=cost,
+            await usage.alog(st["kind"], provider=m["provider"], model=m["model_id"], cost=cost,
                       detail={"job": job["id"], "node": spec.name, "key": m.get("key_name") or ""})
             if st["kind"] == "image":
                 prev_image = st["output"]
-            _save(job)
+            await asave(job)
         job["output"] = job["steps"][-1]["output"]
         job["keyframe"] = prev_image
         job["media"] = await asyncio.to_thread(media.describe, storage.resolve(job["output"], user))
@@ -384,11 +431,11 @@ async def _run(job: dict, user: dict, resume: bool = False):
         for st in job["steps"]:
             if st["status"] == "running":
                 st["status"] = "error"
-    _save(job)
+    await asave(job)
     JOBS.pop(job["id"], None)
     try:
         from . import assets
-        assets.on_job_done(job)
+        await asyncio.to_thread(assets.on_job_done, job)
     except Exception as e:  # noqa: BLE001 - nunca derruba o job
         print(f"[assets] {e}")
 

@@ -1,6 +1,9 @@
 """Ambiente de teste: DATA_DIR temporário, definido antes de importar o app (config lê no import)."""
+import asyncio
 import atexit
 import json
+import os
+import traceback
 import os
 import shutil
 import tempfile
@@ -57,3 +60,30 @@ def login(client):
         assert r.status_code == 200, r.text
         return c
     return _login
+
+
+SYNC_DB_FUNCS = ("one", "all_", "run", "tx", "get_setting", "set_setting")
+
+
+@pytest.fixture(autouse=True)
+def _no_sync_sql_on_event_loop(monkeypatch):
+    """Guarda de runtime: SQL síncrono (db.one/all_/run/tx) chamado com um event loop rodando na thread
+    é violação (travaria o servidor). Falha o teste que causou a chamada."""
+    violations = []
+
+    def guard(name, fn):
+        def wrapper(*a, **k):
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                return fn(*a, **k)
+            where = [f"{f.filename.split('app')[-1]}:{f.lineno} {f.name}" for f in traceback.extract_stack()
+                     if f"{os.sep}app{os.sep}" in f.filename]
+            violations.append(f"{name} @ {where[-1] if where else '?'}")
+            return fn(*a, **k)
+        return wrapper
+
+    for n in SYNC_DB_FUNCS:
+        monkeypatch.setattr(db, n, guard(n, getattr(db, n)))
+    yield
+    assert violations == [], f"SQL síncrono no event loop: {sorted(set(violations))}"

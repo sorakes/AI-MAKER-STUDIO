@@ -60,7 +60,7 @@ def test_resume_marks_unrecoverable_jobs_interrupted(owner):
 
 
 async def _resume_inside_loop():
-    jobs.resume_all()  # precisa de um loop rodando (cria tarefas)
+    await jobs.resume_all()
 
 
 def test_resume_restarts_live_job_with_handle(owner, monkeypatch):
@@ -74,7 +74,32 @@ def test_resume_restarts_live_job_with_handle(owner, monkeypatch):
     monkeypatch.setattr(jobs, "_run", fake_run)
 
     async def go():
-        jobs.resume_all()
+        await jobs.resume_all()
         await asyncio.sleep(0)  # deixa as tarefas criadas começarem
     asyncio.run(go())
     assert (jid, True) in started
+
+
+def test_start_from_worker_thread_schedules_on_server_loop(owner, monkeypatch):
+    """render_pose e assets.generate rodam em threads e chamam jobs.submit: o render tem de cair no loop."""
+    import threading
+
+    started = []
+
+    async def fake_run(job, user, resume=False):
+        started.append((job["id"], threading.current_thread() is threading.main_thread()))
+
+    monkeypatch.setattr(jobs, "_run", fake_run)
+
+    async def main():
+        jobs.bind_loop(asyncio.get_running_loop())
+        job = {"id": "job-thread01", "user_id": owner["id"], "created": time.time(), "status": "queued",
+               "steps": [], "spec": {}}
+        t = threading.Thread(target=jobs.start, args=(job, {"id": owner["id"]}))
+        t.start()
+        t.join()
+        await asyncio.sleep(0.05)  # deixa o loop executar o create_task agendado
+
+    asyncio.run(main())
+    assert started == [("job-thread01", True)]  # a tarefa roda no loop (thread principal), não na worker
+    jobs._LOOP = None
