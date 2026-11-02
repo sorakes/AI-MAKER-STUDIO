@@ -33,6 +33,7 @@ class OutpaintRequest(BaseModel):
     anchor: Literal["center", "top", "bottom", "left", "right"] = "center"  # onde a original fica no quadro
     prompt: str = Field("", max_length=1000)
     model: str | int | None = "auto"
+    client_request_id: str | None = Field(None, max_length=64)  # um id por clique; não entra na repetição
 
 
 class InpaintRequest(BaseModel):
@@ -47,6 +48,7 @@ class InpaintRequest(BaseModel):
     # marked: original com a região em magenta (como antes). Só vale com a identificação; sem ela, usa marked.
     input_mode: Literal["annotated", "clean", "clean_mask", "marked"] = "annotated"
     fill_enclosed: bool = True  # contorno fechado vira região cheia (desligado: só o traço pintado)
+    client_request_id: str | None = Field(None, max_length=64)  # um id por clique; não entra na repetição
 
 
 def pick(user: dict, choice) -> dict | None:

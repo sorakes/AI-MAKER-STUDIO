@@ -221,6 +221,30 @@ function pruneRemovedNodes(d) {
   return gone.size;
 }
 
+// Nós com o mesmo jobId são cópias de um só job: fica o primeiro, as ligações dos outros passam a ele (sem repetir).
+// Devolve quantos nós foram mesclados.
+function dedupeJobNodes(d) {
+  const first = new Map();
+  const drop = new Map();  // id do nó repetido -> id do que fica
+  for (const n of d.nodes) {
+    if (!n.jobId) continue;
+    if (!first.has(n.jobId)) first.set(n.jobId, n.id);
+    else drop.set(n.id, first.get(n.jobId));
+  }
+  if (!drop.size) return 0;
+  const seen = new Set();
+  d.edges = d.edges
+    .map((e) => ({ ...e, from: drop.get(e.from) || e.from, to: drop.get(e.to) || e.to }))
+    .filter((e) => {
+      const k = `${e.from}>${e.to}`;
+      if (e.from === e.to || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  d.nodes = d.nodes.filter((n) => !drop.has(n.id));
+  return drop.size;
+}
+
 // Carrega (uma vez) o canvas de uma área e retoma os renders que estavam rodando nela.
 async function loadWorkspaceDoc(ws) {
   if (cv.docs[ws]) return cv.docs[ws];
@@ -229,6 +253,7 @@ async function loadWorkspaceDoc(ws) {
     title: doc.title || '', created: doc.created || 0, migratedGen: doc.migratedGen };
   const pruned = pruneRemovedNodes(d);
   if (pruned && !cv.prunedNotice) { cv.prunedNotice = true; toast('Nó "Estender / loop" foi desativado e removido deste canvas'); }
+  dedupeJobNodes(d);
   cv.docs[ws] = d;
   for (const n of d.nodes.filter((x) => x.jobId && x.status !== 'done')) {
     const j = await api(`/api/jobs/${n.jobId}`).catch(() => null);
@@ -1116,10 +1141,24 @@ function maskPixels(url) {
   });
 }
 
-async function runEdit(n, { reinforce = false } = {}) {
+// nós com um pedido de edição em curso: o clique duplo (ou o 2º clique antes da resposta) não manda outro job
+const editInFlight = new Set();
+
+// Um clique = no máximo um job: o nó fica marcado do clique até o job terminar (ou falhar).
+async function runEdit(n, opts = {}) {
+  if (editInFlight.has(n.id) || n.status === 'running') return;
+  editInFlight.add(n.id);
+  try {
+    return await runEditOnce(n, opts);
+  } finally {
+    editInFlight.delete(n.id);
+  }
+}
+
+async function runEditOnce(n, { reinforce = false } = {}) {
   const src = upscaleSource(n);
   if (!src) return toast('Ligue uma imagem na entrada');
-  if (n.status === 'running') return;
+  const requestId = (globalThis.crypto?.randomUUID?.()) || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let job;
   try {
     if (n.op === 'inpaint') {
@@ -1129,10 +1168,10 @@ async function runEdit(n, { reinforce = false } = {}) {
         return toast('A região pintada está vazia: pinte de novo antes de aplicar');
       }
       job = await api('/api/image/inpaint', { node_id: n.id, name: n.name, source_url: src, mask: n.mask, prompt: n.prompt || '', model: n.model || 'auto', reinforce,
-        fill_enclosed: n.mask_fill !== false });
+        fill_enclosed: n.mask_fill !== false, client_request_id: requestId });
     } else {
       job = await api('/api/image/outpaint', { node_id: n.id, name: n.name, source_url: src, aspect: n.aspect, anchor: n.anchor,
-        prompt: n.prompt || '', model: n.model || 'auto' });
+        prompt: n.prompt || '', model: n.model || 'auto', client_request_id: requestId });
     }
   } catch (err) {
     Object.assign(n, { status: 'error', error: err.message });

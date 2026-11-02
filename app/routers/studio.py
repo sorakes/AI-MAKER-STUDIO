@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from .. import assets, audio, camera, db, performance, videoedit, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
+from .. import assets, audio, camera, db, idempotency, performance, videoedit, groups, lipsync, providers, sprites, storyboard, subtitles, direction, director, jobs, llm, media, montage, outpaint, promptgen, registry, relight, sketch, storage, transitions, upscale, usage
 from ..auth import current_user, need, require
 from ..brand import CATEGORY_RULES
 from ..config import MAX_UPLOAD_MB
@@ -237,6 +237,12 @@ def _decode_mask(data_url: str) -> bytes:
 
 @router.post("/image/outpaint")
 async def outpaint_image(req: outpaint.OutpaintRequest, user: dict = Depends(current_user)):
+    """Expandir. Um clique = um job: o mesmo pedido em 60 s devolve o job já criado (app/idempotency.py)."""
+    return await idempotency.once(idempotency.key_for(user["id"], "outpaint", req.node_id, req.model_dump()),
+                                  lambda: _create_outpaint(req, user))
+
+
+async def _create_outpaint(req: outpaint.OutpaintRequest, user: dict) -> dict:
     """Expandir: a IA preenche o quadro novo; a original volta por cima do próprio quadro (recomposição)."""
     await _image_source(req.source_url, user)
     src_path = storage.resolve(req.source_url, user)
@@ -262,6 +268,12 @@ async def outpaint_image(req: outpaint.OutpaintRequest, user: dict = Depends(cur
 
 @router.post("/image/inpaint")
 async def inpaint_image(req: outpaint.InpaintRequest, user: dict = Depends(current_user)):
+    """Editar região. Um clique = um job: o mesmo pedido em 60 s devolve o job já criado (app/idempotency.py)."""
+    return await idempotency.once(idempotency.key_for(user["id"], "inpaint", req.node_id, req.model_dump()),
+                                  lambda: _create_inpaint(req, user))
+
+
+async def _create_inpaint(req: outpaint.InpaintRequest, user: dict) -> dict:
     """Editar região: a IA recebe a imagem com a região em magenta; o resultado só muda dentro da máscara."""
     await _image_source(req.source_url, user)
     src_path = storage.resolve(req.source_url, user)
