@@ -376,7 +376,7 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 if diag:
                     parts.append(f"Reference image {lead + 1} is the DIRECTOR'S MOTION DIAGRAM drawn over the first frame: the purple "
                                  "line is the camera route (dot = start, arrow = end) and each other color marks an element (circled) "
-                                 "and where it moves (line/arrow), as explained below. Use it ONLY as instructions: NEVER draw lines, "
+                                 "and where it moves (a line from a solid dot to a hollow ring), as explained below. Use it ONLY as instructions: NEVER draw lines, "
                                  "arrows, circles, dots or labels in the video.")
                 if n_cast:
                     a = lead + diag + 1
