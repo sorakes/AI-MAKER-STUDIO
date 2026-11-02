@@ -1026,3 +1026,6 @@ body.style-pixel .ug-bar i { background: repeating-linear-gradient(90deg, var(--
   .topbar .cv-toolbar { order: 3; width: 100%; flex-wrap: wrap; gap: 6px; padding: 0; border: 0; background: none; }
   .topbar .cv-toolbar .btn { flex: 1 1 auto; justify-content: center; }
 }
+
+/* esconde a página até as traduções carregarem (js/i18n.js); some sozinho em 1,5 s */
+html.i18n-wait body { visibility: hidden; }

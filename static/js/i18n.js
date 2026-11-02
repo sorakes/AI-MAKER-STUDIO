@@ -18,11 +18,9 @@
   };
   let lang = pick();
   if (lang !== 'pt') {
-    const st = document.createElement('style');
-    st.id = 'i18n-wait';
-    st.textContent = 'body{visibility:hidden}';
-    document.head.appendChild(st);
-    setTimeout(() => st.remove(), 1500); // nunca deixa a página escondida
+    // classe no <html> (a regra fica no CSS): um <style> criado por JS é bloqueado pela CSP
+    document.documentElement.classList.add('i18n-wait');
+    setTimeout(() => document.documentElement.classList.remove('i18n-wait'), 1500); // nunca deixa a página escondida
   }
   let exact = new Map();
   let patterns = [];
@@ -167,7 +165,7 @@
     if (lang === 'pt' || obs) return;
     walk(document.documentElement);
     if (document.title) document.title = tr(document.title);
-    document.getElementById('i18n-wait')?.remove();
+    document.documentElement.classList.remove('i18n-wait');
     obs = new MutationObserver((list) => {
       for (const m of list) {
         if (m.type === 'childList') m.addedNodes.forEach(walk);

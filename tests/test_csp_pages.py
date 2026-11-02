@@ -62,3 +62,10 @@ def test_pages_load_styles_applier_before_render_scripts():
         renderers = [html.index(s) for s in ("/js/common.js", "/js/login.js", "/js/admin.js") if s in html]
         if renderers:
             assert html.index("/js/styles.js") < min(renderers), name
+
+
+def test_no_runtime_style_element_injection():
+    # <style> criado por JS também é bloqueado pela CSP: estilos só via CSSOM (styles.js) ou classes
+    for path in (config.STATIC_DIR / "js").glob("*.js"):
+        text = path.read_text(encoding="utf-8")
+        assert "createElement('style')" not in text and 'createElement("style")' not in text, path.name

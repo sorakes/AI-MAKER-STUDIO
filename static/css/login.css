@@ -25,3 +25,6 @@
     body.pixel button { border-radius: 0; box-shadow: 0 -3px 0 0 #0006, 0 3px 0 0 #0006, -3px 0 0 0 #0006, 3px 0 0 0 #0006, inset 0 -3px 0 #0005; }
     body.pixel button:active { transform: translateY(2px); }
     .lang { margin-top: 14px; width: 100%; background: transparent; color: var(--muted, #8a93a6); border: 1px solid rgba(255,255,255,.12); padding: 6px 8px; font: inherit; font-size: .8rem; }
+
+/* esconde a página até as traduções carregarem (js/i18n.js); some sozinho em 1,5 s */
+html.i18n-wait body { visibility: hidden; }
