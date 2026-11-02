@@ -20,9 +20,10 @@ const DZ_COLORS = {
 const DZ_PLACEHOLDER = {
   camera: 'O que a câmera faz? Ex.: começa aberta, avança devagar até a garrafa e sobe até o logo.',
   element: 'O que este elemento faz? Ex.: a bola vai levemente para a direita.',
+  sketch: 'O que muda nesta região? Ex.: a camiseta passa a ser azul-marinho.',
 };
 
-const dz = { node: null, frame: null, img: null, layers: [], active: 'camera', tool: 'draw', stroke: null, history: [], result: null, busy: false, help: true };
+const dz = { node: null, frame: null, img: null, layers: [], active: 'camera', tool: 'draw', stroke: null, history: [], result: null, busy: false, help: true, mode: 'direction' };
 
 // ---------------- Card no nó + balão ----------------
 
@@ -130,6 +131,8 @@ function initDirection() {
 function openDirection(n) {
   const frame = startFrameOf(n);
   if (!frame) return;
+  dz.mode = 'direction';
+  sketchChrome(false);
   dz.node = n;
   dz.frame = frame;
   const saved = n.direction;
@@ -150,6 +153,42 @@ function openDirection(n) {
   renderDzCards();
   renderDzResult();
   setTool('draw');
+}
+
+// Modo "Desenhar para regerar" (imagem gerada): mesmo editor, sem câmera nem interpretação.
+function openSketch(n) {
+  const out = n.output;
+  if (!out?.url || out.kind === 'video') return toast('Gere a imagem primeiro');
+  dz.mode = 'sketch';
+  dz.node = n;
+  dz.frame = out.url;
+  const saved = n.sketch?.layers;
+  dz.layers = saved ? JSON.parse(JSON.stringify(saved)) : [{ color: 'red', label: DZ_COLORS.red.label, prompt: '', shapes: [] }];
+  dz.active = dz.layers[0].color;
+  dz.result = null;
+  dz.tool = 'draw';
+  dz.history = [];
+  sketchChrome(true);
+  $('#dzTitle').textContent = n.name;
+  dz.img = new Image();
+  dz.img.onload = () => { dzSize(); dzRender(); };
+  dz.img.src = out.url;
+  $('#dzImg').src = out.url;
+  $('#dzDialog').showModal();
+  renderDzCards();
+  renderDzResult();
+  setTool('draw');
+}
+
+// Esconde o que é só de câmera no modo de regerar e troca os rótulos do editor.
+function sketchChrome(on) {
+  $('#dzInterpret').hidden = on;
+  $('#dzInterpret').closest('.dz-res-box').hidden = on;
+  $('#dzHelpBtn').hidden = on;
+  $('#dzHelp').hidden = on || !dz.help;
+  $('#dzSave').lastChild.textContent = on ? ' Regerar imagem' : ' Salvar';
+  const small = document.querySelector('.dz-title small');
+  if (small) small.textContent = on ? 'Desenhar para regerar · marque o que muda' : 'Câmera e movimento · desenhe no frame';
 }
 
 function dzSize() {
@@ -347,7 +386,7 @@ function renderDzCards() {
         ${l.shapes.length ? `<button class="cv-hbtn" data-clear="${l.color}" title="Apagar traços desta cor" aria-label="Apagar traços desta cor">${ic('undo')}</button>` : ''}
         ${cam ? '' : `<button class="cv-hbtn" data-remove="${l.color}" title="Remover elemento" aria-label="Remover elemento">${ic('trash')}</button>`}
       </div>
-      <textarea rows="${cam ? 3 : 2}" data-prompt="${l.color}" placeholder="${esc(cam ? DZ_PLACEHOLDER.camera : DZ_PLACEHOLDER.element)}">${esc(l.prompt)}</textarea>
+      <textarea rows="${cam ? 3 : 2}" data-prompt="${l.color}" placeholder="${esc(cam ? DZ_PLACEHOLDER.camera : dz.mode === 'sketch' ? DZ_PLACEHOLDER.sketch : DZ_PLACEHOLDER.element)}">${esc(l.prompt)}</textarea>
       ${cam && !l.shapes.length ? '<small class="dz-tip">Desenhe em roxo por onde a câmera vai: o ponto é o começo e a seta, o fim.</small>' : ''}
       ${!cam && !l.shapes.length ? '<small class="dz-tip">Circule o objeto ou puxe uma linha: o ponto cheio marca o começo e o anel vazio, o fim.</small>' : ''}
     </div>`;
@@ -423,7 +462,34 @@ function renderDzResult() {
     <small class="dz-src">via ${esc(r.source || '')}</small>`;
 }
 
+// Regerar: a visão lê a imagem com as marcações; o gerador recebe a imagem original (sem traços).
+async function saveSketch() {
+  const n = dz.node;
+  const layers = activeLayers();
+  if (!layers.length) return toast('Circule uma região ou escreva o que deve mudar');
+  const btn = $('#dzSave');
+  btn.disabled = true;
+  try {
+    const job = await api('/api/image/regenerate-from-sketch', {
+      node_id: n.id, name: n.name, source_url: n.output.url, annotated: annotatedImage(),
+      layers: layers.map((l) => ({ color: l.color, label: l.label, prompt: l.prompt, shapes: l.shapes })),
+      intent: n.intent || '', model: n.model || 'auto', aspect: n.aspect || '16:9',
+      quality: n.quality === 'final' ? 'final' : 'draft', ref_image_urls: refsOf(n),
+    });
+    n.sketch = { layers: JSON.parse(JSON.stringify(dz.layers)) };
+    Object.assign(n, { jobId: job.id, status: 'running', progress: 0, error: null, stage: 'enviado', cost: null });
+    $('#dzDialog').close();
+    renderNode(n);
+    save();
+    toast(`${n.name}: regerando a partir do desenho`);
+    watchJob(n);  // a versão anterior continua nas versões do nó (takes)
+  } catch (err) {
+    toast(`Não deu para regerar: ${err.message}`);
+  } finally { btn.disabled = false; }
+}
+
 async function saveDirection() {
+  if (dz.mode === 'sketch') return saveSketch();
   const n = dz.node;
   const btn = $('#dzSave');
   btn.disabled = true;
