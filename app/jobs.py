@@ -17,7 +17,7 @@ import uuid
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from . import db, media, outpaint, promptgen, providers, registry, relight, storage, upscale, usage
+from . import db, lipsync, media, outpaint, promptgen, providers, registry, relight, storage, upscale, usage
 from .auth import CURRENT, public_user
 
 JOBS: dict[str, dict] = {}
@@ -59,6 +59,10 @@ def plan(user: dict, r: RenderRequest) -> list[dict]:
     if r.gen == "upscale":  # IA com referências se houver modelo; senão upscale simples local
         m = upscale.pick(user, r.model)
         return [_step("image", m or upscale.LOCAL, "Upscale criativo" if m else "Upscale simples")]
+    if r.gen == "lipsync":  # lip sync real se houver modelo habilitado; senão animação simples com o áudio
+        m = lipsync.pick(user, r.model)
+        label = "Fala com IA" if m else "Animação simples"
+        return [_step("video", m or relight.local_model(label), label)]
     if r.gen in ("outpaint", "inpaint"):  # IA com referências se houver modelo; senão preenchimento simples
         m = outpaint.pick(user, r.model)
         label = ("Expandir" if r.gen == "outpaint" else "Editar região") + (" com IA" if m else " simples")
@@ -412,7 +416,14 @@ async def _run(job: dict, user: dict, resume: bool = False):
                 prompt, caption = await asyncio.to_thread(promptgen.adapt_to_frame, spec.prompt, prev_image)
                 job["spec"]["prompt"], job["first_frame_caption"] = prompt, caption
             try:
-                if m["provider"] == "openrouter" and st["kind"] == "video":
+                if spec.gen == "lipsync" and m["provider"] == "openrouter":  # lip sync real (gancho do provedor)
+                    job["detail"] = "gerando a fala"
+                    data = await asyncio.to_thread(lipsync.remote, m, spec.ref_image_urls[0],
+                                                   spec.local_op.get("audio_url"), spec.keyframe_prompt or spec.prompt)
+                    cost = registry.estimate(m, spec.duration)
+                    st["output"] = await asyncio.to_thread(_store_bytes, job, i, data, ".mp4")
+                    url = None
+                elif m["provider"] == "openrouter" and st["kind"] == "video":
                     data = await _or_video(job, st, m, i, n, prompt, spec, prev_image, step_refs)
                     cost = registry.estimate(m, spec.duration)
                     job["detail"] = "salvando vídeo"
@@ -420,9 +431,12 @@ async def _run(job: dict, user: dict, resume: bool = False):
                     url = None
                 elif m["provider"] == "local":  # upscale/relight/estilo simples: Pillow, sem provedor
                     src = storage.resolve(spec.ref_image_urls[0], user)
-                    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}.png"
+                    dest = storage.user_dir(job["user_id"], "renders") / f"{job['id']}_{i}{'.mp4' if spec.gen == 'lipsync' else '.png'}"
                     if spec.gen == "upscale":
                         await asyncio.to_thread(upscale.resize_file, src, spec.upscale_factor, dest)
+                    elif spec.gen == "lipsync":
+                        audio = storage.resolve(spec.local_op["audio_url"], user)
+                        await asyncio.to_thread(lipsync.apply_local, spec.local_op, src, audio, dest)
                     elif spec.gen in ("outpaint", "inpaint"):
                         paths = {k[:-4]: str(storage.resolve(v, user)) for k, v in spec.local_op.items() if k.endswith("_url")}
                         await asyncio.to_thread(outpaint.apply_local, spec.local_op, paths, dest)
