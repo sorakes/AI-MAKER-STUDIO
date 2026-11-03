@@ -12,7 +12,9 @@ Self-hosted, vários modelos via [OpenRouter](https://openrouter.ai), sem precis
 
 [English](README.md) · **Português**
 
-![Canvas do AI Maker Studio: nós de imagem alimentando nós de vídeo, encadeados até a montagem final](docs/canvas.png)
+![AI Maker Studio em 30 segundos: canvas de nós, elenco consistente, qualquer modelo, times e instalação com um comando](docs/presentation.gif)
+
+<sub><a href="docs/presentation.mp4">▶ Assistir em HD</a></sub>
 
 </div>
 

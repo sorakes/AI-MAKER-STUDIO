@@ -15,7 +15,9 @@ Self-hosted, multi-model through [OpenRouter](https://openrouter.ai), no GPU req
 
 [Quick start](#quick-start) · [Features](#features) · [For teams](#for-teams-admin-panel) · [Configuration](#configuration) · [Português](README.pt-BR.md)
 
-![The AI Maker Studio canvas: image nodes feeding video nodes, chained into a final edit](docs/canvas.png)
+![AI Maker Studio in 30 seconds: node canvas, consistent cast, any model, teams, one-command install](docs/presentation.gif)
+
+<sub><a href="docs/presentation.mp4">▶ Watch in HD</a></sub>
 
 </div>
 
