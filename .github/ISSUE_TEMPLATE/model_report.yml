@@ -1,0 +1,26 @@
+name: Model compatibility report
+description: Tell us how an OpenRouter model behaves in the studio
+labels: [models]
+body:
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: e.g. MiniMax Hailuo 3 Max
+    validations:
+      required: true
+  - type: checkboxes
+    id: works
+    attributes:
+      label: What works
+      options:
+        - label: Text → video
+        - label: Image → video (first frame)
+        - label: First + last frame
+        - label: Multiple references (cast / product)
+        - label: Camera direction is followed
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Quality, cost per clip, durations, anything surprising. Links to results are welcome.

@@ -51,8 +51,8 @@ def test_new_markup_has_no_inline_style():
 
 def test_readme_limitation_section_lists_the_three_models():
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
-    assert re.search(r"^## Limitações conhecidas", readme, re.M)
-    section = readme.split("## Limitações conhecidas", 1)[1].split("\n## ", 1)[0]
+    assert re.search(r"^## Known limitations", readme, re.M)
+    section = readme.split("## Known limitations", 1)[1].split("\n## ", 1)[0]
     for model in ("Nano Banana 2 Lite", "Nano Banana Pro", "GPT-5 Image"):
         assert model in section
     assert "US$" in section

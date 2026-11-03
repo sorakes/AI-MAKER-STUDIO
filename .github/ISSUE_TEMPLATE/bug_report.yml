@@ -1,0 +1,45 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the Video Studio
+        2. Connect an image node to a video node
+        3. ...
+  - type: input
+    id: model
+    attributes:
+      label: Model(s) involved
+      placeholder: e.g. Kling v3.0 Standard, Seedance 2.0 Fast
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running it?
+      options:
+        - docker run (GHCR image)
+        - docker compose
+        - Without Docker (uvicorn)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: e.g. v1.0.0 or a commit SHA
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output of `docker logs ai-studio` around the error. Remove any keys or personal data.
+      render: text
