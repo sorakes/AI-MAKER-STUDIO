@@ -50,9 +50,9 @@ def bootstrap_admin():
            (ADMIN_EMAIL.lower(), "Administrador", hash_password(password), "admin",
             json.dumps({k: None for k in DEFAULT_LIMITS}), time.time()))
     print("=" * 60)
-    print(f"Admin criado: {ADMIN_EMAIL}")
+    print(f"Admin created: {ADMIN_EMAIL}")
     if not ADMIN_PASSWORD:
-        print(f"Senha gerada: {password}   (troque no painel; ou defina ADMIN_PASSWORD)")
+        print(f"Generated admin password: {password}   (change it in the panel, or set ADMIN_PASSWORD)")
     print("=" * 60)
 
 

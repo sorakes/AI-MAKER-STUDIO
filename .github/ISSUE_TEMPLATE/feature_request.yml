@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest a node, a model or an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to make?
+      description: Describe the shot, video or workflow you want, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How could the studio help? A new node, a model, a setting?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds you tried
