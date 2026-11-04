@@ -314,7 +314,7 @@ function paintTag(g, l, W, H, scale) {
   const [x, y] = sh.points[0];
   g.save();
   g.font = `700 ${11 * scale}px Inter, sans-serif`;
-  const text = DZ_COLORS[l.color].label;
+  const text = window.I18N ? I18N.t(DZ_COLORS[l.color].label) : DZ_COLORS[l.color].label;
   const tw = g.measureText(text).width + 10 * scale;
   const px = Math.min(W - tw - 4, Math.max(4, x * W - tw / 2)), py = Math.max(4, y * H - 26 * scale);
   g.fillStyle = DZ_COLORS[l.color].hex; g.fillRect(px, py, tw, 17 * scale);

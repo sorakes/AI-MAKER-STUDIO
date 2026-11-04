@@ -12,7 +12,7 @@ Self-hosted, vários modelos via [OpenRouter](https://openrouter.ai), sem precis
 
 [English](README.md) · **Português**
 
-![AI Maker Studio em 30 segundos: canvas de nós, elenco consistente, qualquer modelo, times e instalação com um comando](docs/presentation.gif)
+![Um comercial de perfume feito do começo ao fim no studio: foto do produto, nó de imagem, câmera desenhada no frame, duas cenas conectadas e o corte final](docs/presentation.gif)
 
 <sub><a href="docs/presentation.mp4">▶ Assistir em HD</a></sub>
 

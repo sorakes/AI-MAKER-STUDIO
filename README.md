@@ -15,7 +15,7 @@ Self-hosted, multi-model through [OpenRouter](https://openrouter.ai), no GPU req
 
 [Quick start](#quick-start) · [Features](#features) · [For teams](#for-teams-admin-panel) · [Configuration](#configuration) · [Português](README.pt-BR.md)
 
-![AI Maker Studio in 30 seconds: node canvas, consistent cast, any model, teams, one-command install](docs/presentation.gif)
+![A perfume commercial made start to finish in the studio: product photo, image node, camera drawn on the frame, two connected shots and the final cut](docs/presentation.gif)
 
 <sub><a href="docs/presentation.mp4">▶ Watch in HD</a></sub>
 
