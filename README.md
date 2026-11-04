@@ -47,8 +47,6 @@ For production (fixed `SECRET_KEY`, your own admin account, video editing tunnel
 
 ## Features
 
-![Tour of the studio and the admin panel](docs/demo.gif)
-
 **Studio** (`/`, after signing in)
 
 - Connected nodes: script, cast/product, image, video, transition, frame, approval and edit.
@@ -70,6 +68,9 @@ For production (fixed `SECRET_KEY`, your own admin account, video editing tunnel
 ## For teams (admin panel)
 
 Built to be shared by an agency or a marketing team, with every person in their own workspace. The admin panel lives at `/admin`:
+
+![Admin panel tour: dashboard, users, groups and budgets, Microsoft sign-in, encrypted keys and models, live branding and audit logs](docs/admin-tour.gif)
+
 
 - **Users and groups** with base permissions (areas, image/video generation, AI assistants, upload/delete, admin) and per-node permissions. Accounts in several groups get the sum of permissions and the most generous limit.
 - **Token budget per group**: set a monthly amount in US$, either "each person gets this amount" or "split among members". People only ever see tokens.

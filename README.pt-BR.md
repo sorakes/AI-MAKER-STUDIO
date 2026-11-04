@@ -50,6 +50,8 @@ docker compose up -d --build
 
 ## Para times
 
+![Tour do painel de admin: dashboard, usuários, grupos e orçamentos, login Microsoft, chaves criptografadas e modelos, branding ao vivo e logs de auditoria](docs/admin-tour.gif)
+
 O painel em `/admin` controla usuários e grupos com permissões por área e por nó, orçamento mensal de tokens por grupo, login Microsoft (Entra ID) com atribuição automática de grupos, chaves de API sempre criptografadas, catálogo de modelos do OpenRouter, branding, prompts editáveis, logs com exportação CSV e dashboard.
 
 A interface vem em **inglês**, **português** e **espanhol**, e a IA escreve notas e sugestões no idioma escolhido.
