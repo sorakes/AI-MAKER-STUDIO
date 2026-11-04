@@ -12,7 +12,9 @@ Self-hosted, vários modelos via [OpenRouter](https://openrouter.ai), sem precis
 
 [English](README.md) · **Português**
 
-![Canvas do AI Maker Studio: nós de imagem alimentando nós de vídeo, encadeados até a montagem final](docs/canvas.png)
+![Um comercial de perfume feito do começo ao fim no studio: foto do produto, nó de imagem, câmera desenhada no frame, duas cenas conectadas e o corte final](docs/presentation.gif)
+
+<sub><a href="docs/presentation.mp4">▶ Assistir em HD</a></sub>
 
 </div>
 

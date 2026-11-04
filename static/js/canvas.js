@@ -1912,7 +1912,7 @@ function connect(from, to, port) {
   save();
   if (to.type === 'transition') toast(port === 'a' ? 'Entrada A: a transição sai deste vídeo/imagem' : 'Entrada B: a transição chega neste vídeo/imagem');
   if (to.type === 'shot') toast(from.type === 'transition' ? 'Continuidade: o último frame da transição vira o 1º frame do plano'
-    : from.type === 'media' && from.media.kind === 'video' ? 'Continuação: o último frame do vídeo vira o 1º frame do plano' : 'Imagem conectada como 1º frame');
+    : (from.type === 'media' && from.media.kind === 'video') || (from.type === 'shot' && from.gen !== 'image') ? 'Continuação: o último frame do vídeo vira o 1º frame do plano' : 'Imagem conectada como 1º frame');
 }
 
 function invalidate(n) {
